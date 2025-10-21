@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>周报生成器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        input[type="text"],
+        input[type="date"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .project-list {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            min-height: 100px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .project-item {
+            background: #f5f5f5;
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            animation: slideIn 0.3s ease;
+            border-left: 4px solid #667eea;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .project-item span {
+            flex: 1;
+            color: #333;
+            word-break: break-all;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+        }
+
+        .project-item button {
+            background: #ff4757;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.3s;
+        }
+
+        .project-item button:hover {
+            background: #ff3838;
+        }
+
+        .add-project-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .add-project-group input {
+            flex: 1;
+        }
+
+        .btn-browse {
+            background: #5f27cd;
+            color: white;
+            min-width: 100px;
+        }
+
+        .btn-browse:hover {
+            background: #341f97;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #48dbfb;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #0abde3;
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .date-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .generate-btn {
+            width: 100%;
+            padding: 16px;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .reports-section {
+            margin-top: 20px;
+        }
+
+        .report-item {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .report-info {
+            flex: 1;
+        }
+
+        .report-name {
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .report-meta {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .download-btn {
+            background: #48dbfb;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: background 0.3s;
+        }
+
+        .download-btn:hover {
+            background: #0abde3;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .tip {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 主表单卡片 -->
+        <div class="card">
+            <h1>📊 周报生成器</h1>
+            <p class="subtitle">自动从Git提交记录生成工作周报</p>
+
+            <div id="alertContainer"></div>
+
+            <form id="reportForm">
+                <!-- 姓名输入 -->
+                <div class="form-group">
+                    <label for="userName">👤 周报负责人姓名</label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="text" id="userName" placeholder="请输入姓名" required style="flex: 1;">
+                        <button type="button" class="btn btn-secondary" onclick="clearCache()" style="padding: 8px 12px; font-size: 12px;">🗑️ 清除缓存</button>
+                    </div>
+                </div>
+
+                <!-- 日期范围 -->
+                <div class="form-group">
+                    <label>📅 日期范围（留空则默认本周）</label>
+                    <div class="date-group">
+                        <input type="date" id="startDate" placeholder="开始日期">
+                        <input type="date" id="endDate" placeholder="结束日期">
+                    </div>
+                </div>
+
+                <!-- 项目路径 -->
+                <div class="form-group">
+                    <label>📁 项目路径（可添加多个）</label>
+                    <div class="project-list" id="projectList">
+                        <div class="empty-state" id="emptyState">
+                            暂无项目，请在下方添加
+                        </div>
+                    </div>
+                    <div class="add-project-group">
+                        <input type="text" id="projectPathInput" placeholder="输入项目绝对路径，如：/Users/xxx/project">
+                        <button type="button" class="btn btn-browse" onclick="browseDirectory()">📁 浏览</button>
+                        <button type="button" class="btn btn-secondary" onclick="addProject()">➕ 添加</button>
+                        <button type="button" class="btn btn-secondary" onclick="debugProjects()" style="background: #ff6b6b; font-size: 12px;">🔍 调试</button>
+                    </div>
+                    <div class="tip">
+                        💡 提示：请输入Git项目的绝对路径，可以添加多个项目一起生成周报<br>
+                        📝 已添加 <span id="projectCount">0</span> 个项目
+                    </div>
+                </div>
+
+                <!-- 生成按钮 -->
+                <button type="submit" class="btn btn-primary generate-btn">
+                    🚀 生成周报
+                </button>
+            </form>
+
+            <!-- 加载状态 -->
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>正在生成周报，请稍候...</p>
+            </div>
+        </div>
+
+        <!-- 历史周报列表 -->
+        <div class="card reports-section">
+            <h2 style="margin-bottom: 20px; color: #333;">📚 历史周报</h2>
+            <div id="reportsList">
+                <div class="empty-state">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let projectPaths = [];
+
+        // 页面加载时恢复缓存的数据
+        document.addEventListener('DOMContentLoaded', function() {
+            loadCachedData();
+        });
+
+        // 加载缓存数据
+        function loadCachedData() {
+            const cachedUserName = localStorage.getItem('weeklyReport_userName');
+            const cachedProjectPaths = localStorage.getItem('weeklyReport_projectPaths');
+            
+            console.log('加载缓存数据...');
+            console.log('缓存的用户名:', cachedUserName);
+            console.log('缓存的项目路径:', cachedProjectPaths);
+            
+            if (cachedUserName) {
+                document.getElementById('userName').value = cachedUserName;
+            }
+            
+            if (cachedProjectPaths) {
+                try {
+                    const parsedPaths = JSON.parse(cachedProjectPaths);
+                    projectPaths = parsedPaths || [];
+                    console.log('恢复的项目路径:', projectPaths);
+                    renderProjects();
+                } catch (e) {
+                    console.error('解析缓存的项目路径失败:', e);
+                    projectPaths = [];
+                }
+            } else {
+                projectPaths = [];
+            }
+        }
+
+        // 保存数据到缓存
+        function saveCachedData() {
+            const userName = document.getElementById('userName').value.trim();
+            if (userName) {
+                localStorage.setItem('weeklyReport_userName', userName);
+            }
+            localStorage.setItem('weeklyReport_projectPaths', JSON.stringify(projectPaths));
+            console.log('保存到缓存:', { userName, projectPaths });
+        }
+
+        // 浏览文件夹
+        async function browseDirectory() {
+            try {
+                const response = await fetch('/api/browse-directory');
+                const result = await response.json();
+
+                if (result.success && result.path) {
+                    document.getElementById('projectPathInput').value = result.path;
+                    showAlert('✅ 已选择目录: ' + result.path, 'success');
+                } else if (result.cancelled) {
+                    // 用户取消选择，不显示错误
+                } else {
+                    showAlert('选择目录失败: ' + (result.error || '未知错误'), 'error');
+                }
+            } catch (err) {
+                showAlert('打开文件选择器失败: ' + err.message, 'error');
+            }
+        }
+
+        // 添加项目路径
+        function addProject() {
+            const input = document.getElementById('projectPathInput');
+            const path = input.value.trim();
+
+            console.log('尝试添加项目:', path);
+            console.log('当前项目列表:', projectPaths);
+
+            if (!path) {
+                showAlert('请输入项目路径', 'error');
+                return;
+            }
+
+            if (projectPaths.includes(path)) {
+                showAlert('该项目已添加', 'error');
+                return;
+            }
+
+            projectPaths.push(path);
+            input.value = '';
+            console.log('添加后的项目列表:', projectPaths);
+            renderProjects();
+            saveCachedData(); // 保存到缓存
+            showAlert(`✅ 已添加项目: ${path.split('/').pop()}`, 'success');
+        }
+
+        // 删除项目路径
+        function removeProject(index) {
+            projectPaths.splice(index, 1);
+            renderProjects();
+            saveCachedData(); // 保存到缓存
+        }
+
+        // 渲染项目列表
+        function renderProjects() {
+            const container = document.getElementById('projectList');
+            const emptyState = document.getElementById('emptyState');
+            const projectCount = document.getElementById('projectCount');
+
+            console.log('渲染项目列表，当前项目数:', projectPaths.length);
+
+            // 更新项目计数
+            if (projectCount) {
+                projectCount.textContent = projectPaths.length;
+            }
+
+            if (projectPaths.length === 0) {
+                emptyState.style.display = 'block';
+                container.querySelectorAll('.project-item').forEach(item => item.remove());
+                return;
+            }
+
+            emptyState.style.display = 'none';
+            container.innerHTML = '';
+
+            projectPaths.forEach((path, index) => {
+                const item = document.createElement('div');
+                item.className = 'project-item';
+                const projectName = path.split('/').pop() || path; // 获取项目名称
+                item.innerHTML = `
+                    <span title="${path}">📁 ${projectName}</span>
+                    <button type="button" onclick="removeProject(${index})">删除</button>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        // 显示提示信息
+        function showAlert(message, type = 'info') {
+            const container = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            container.appendChild(alert);
+
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        }
+
+        // 生成周报
+        document.getElementById('reportForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const userName = document.getElementById('userName').value.trim();
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            if (!userName) {
+                showAlert('请输入姓名', 'error');
+                return;
+            }
+
+            if (projectPaths.length === 0) {
+                showAlert('请至少添加一个项目路径', 'error');
+                return;
+            }
+
+            // 保存当前数据到缓存
+            saveCachedData();
+
+            // 显示加载状态
+            document.getElementById('loading').classList.add('show');
+            document.querySelector('.generate-btn').disabled = true;
+
+            try {
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userName,
+                        projectPaths,
+                        startDate,
+                        endDate
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert(
+                        `✅ ${result.message}！任务: ${result.tasks}条，问题: ${result.problems}条`, 
+                        'success'
+                    );
+                    
+                    if (result.downloadUrl) {
+                        setTimeout(() => {
+                            window.location.href = result.downloadUrl;
+                        }, 1000);
+                    }
+
+                    // 刷新历史记录
+                    loadReports();
+                } else {
+                    showAlert(`❌ ${result.error}`, 'error');
+                }
+            } catch (err) {
+                showAlert(`❌ 请求失败: ${err.message}`, 'error');
+            } finally {
+                document.getElementById('loading').classList.remove('show');
+                document.querySelector('.generate-btn').disabled = false;
+            }
+        });
+
+        // 加载历史周报
+        async function loadReports() {
+            const container = document.getElementById('reportsList');
+            
+            try {
+                const response = await fetch('/api/reports');
+                const data = await response.json();
+
+                if (data.reports.length === 0) {
+                    container.innerHTML = '<div class="empty-state">暂无历史周报</div>';
+                    return;
+                }
+
+                container.innerHTML = data.reports.map(report => `
+                    <div class="report-item">
+                        <div class="report-info">
+                            <div class="report-name">📄 ${report.name}</div>
+                            <div class="report-meta">
+                                大小: ${report.size} | 
+                                创建时间: ${new Date(report.createdAt).toLocaleString('zh-CN')}
+                            </div>
+                        </div>
+                        <a href="${report.downloadUrl}" class="download-btn">⬇️ 下载</a>
+                    </div>
+                `).join('');
+            } catch (err) {
+                container.innerHTML = '<div class="empty-state">加载失败</div>';
+            }
+        }
+
+        // 页面加载时获取历史周报
+        loadReports();
+
+        // 支持回车添加项目
+        document.getElementById('projectPathInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addProject();
+            }
+        });
+
+        // 姓名输入时自动保存
+        document.getElementById('userName').addEventListener('input', function() {
+            saveCachedData();
+        });
+
+        // 清除缓存
+        function clearCache() {
+            if (confirm('确定要清除所有缓存数据吗？这将删除已保存的姓名和项目路径。')) {
+                localStorage.removeItem('weeklyReport_userName');
+                localStorage.removeItem('weeklyReport_projectPaths');
+                
+                // 清空界面
+                document.getElementById('userName').value = '';
+                projectPaths = [];
+                renderProjects();
+                
+                showAlert('✅ 缓存已清除', 'success');
+            }
+        }
+
+        // 调试功能
+        function debugProjects() {
+            console.log('=== 调试信息 ===');
+            console.log('当前项目数组:', projectPaths);
+            console.log('项目数量:', projectPaths.length);
+            console.log('localStorage 项目路径:', localStorage.getItem('weeklyReport_projectPaths'));
+            console.log('DOM 项目列表元素:', document.getElementById('projectList'));
+            console.log('项目计数元素:', document.getElementById('projectCount'));
+            
+            showAlert(`🔍 调试信息已输出到控制台\n当前项目数: ${projectPaths.length}`, 'info');
+        }
+    </script>
+</body>
+</html>
+

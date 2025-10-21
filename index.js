@@ -1,0 +1,304 @@
+const ExcelJS = require('exceljs');
+const { execSync } = require('child_process');
+const { startOfWeek, endOfWeek, format } = require('date-fns');
+const OpenAI = require('openai');
+const fs = require('fs');
+
+// ==================== 配置项（请根据实际情况修改）====================
+const config = {
+  userName: '陈毅', // 周报负责人姓名
+  projectPath: '/path/to/your/project', // Git项目本地路径（绝对路径）
+  templatePath: './周报模版.xlsx', // 模板文件路径
+  outputPath: `./${format(new Date(), 'yyyyMMdd')}_工作周报.xlsx`, // 输出文件路径
+  deepseekApiKey: process.env.DEEPSEEK_API_KEY, // DeepSeek API密钥（从环境变量获取）
+  deepseekModel: 'deepseek-chat', // 推荐使用deepseek-coder（代码解析更优）
+  weekStartsOnMonday: true, // 周一为一周第一天
+  // 模板中表格起始行（需根据你的模板调整！）
+  templateRows: {
+    titleRow: 1, // 标题所在行（如："XXX 2025年XX月XX-XX月XX日工作周报"）
+    taskStartRow: 4, // 重点任务表格起始行（含表头的下一行）
+    problemStartRow: 12 // 日常问题表格起始行（含表头的下一行）
+  }
+};
+
+// ==================== 工具函数：日期处理 ====================
+/**
+ * 获取本周日期范围（周一至周日）
+ * @returns {Object} { start: Date, end: Date, startStr: 字符串, endStr: 字符串 }
+ */
+function getThisWeekRange() {
+  const today = new Date();
+  const start = startOfWeek(today, { weekStartsOn: 1 }); // 周一
+  
+  // 周五 = 周一 + 4天
+  const end = new Date(start);
+  end.setDate(start.getDate() + 4);
+
+  return {
+    start,
+    end,
+    startStr: format(start, 'MM月dd日'),
+    endStr: format(end, 'MM月dd日'),
+    year: format(start, 'yyyy'),
+    month: format(start, 'MM')
+  };
+}
+
+// ==================== 工具函数：Git提交记录提取 ====================
+/**
+ * 从Git仓库获取本周提交记录
+ * @returns {Array} 结构化的提交记录数组
+ */
+function getGitCommits() {
+  const { start, end, startStr, endStr } = getThisWeekRange();
+  const since = format(start, 'yyyy-MM-dd');
+  const until = format(end, 'yyyy-MM-dd');
+
+  console.log(`\n📅 查询时间范围: ${since} ~ ${until} (${startStr} ~ ${endStr})`);
+  console.log(`📁 扫描项目: ${config.projectPath}\n`);
+
+  try {
+    // 执行Git命令：获取指定时间范围内的提交（含文件修改记录）
+    const cmd = `git -C "${config.projectPath}" log \
+      --since="${since}" --until="${until} 23:59:59" \
+      --pretty=format:"COMMIT_SEP|%H|%an|%ad|%s" --date=short \
+      --name-status`;
+
+    const output = execSync(cmd, { encoding: 'utf-8' });
+    
+    if (!output.trim()) {
+      console.log('ℹ️  此期间无提交记录');
+      return [];
+    }
+    
+    const lines = output.split('\n').filter(line => line.trim() !== '');
+
+    // 解析提交记录为结构化数据
+    const commits = [];
+    let currentCommit = null;
+
+    for (const line of lines) {
+      if (line.startsWith('COMMIT_SEP|')) {
+        // 新提交的分隔行：拆分哈希、作者、日期、提交信息
+        if (currentCommit) commits.push(currentCommit);
+        const [, hash, author, date, message] = line.split('|');
+        currentCommit = {
+          hash: hash.substring(0, 8), // 只保留前8位
+          author,
+          date,
+          message: message.trim(),
+          files: [] // 存储修改的文件列表
+        };
+      } else if (currentCommit) {
+        // 处理文件修改记录（A=新增，M=修改，D=删除）
+        currentCommit.files.push(line.trim());
+      }
+    }
+    // 添加最后一个提交
+    if (currentCommit) commits.push(currentCommit);
+
+    console.log(`✅ 找到 ${commits.length} 条提交记录\n`);
+    
+    // 输出每条提交的详细信息
+    commits.forEach((commit, index) => {
+      console.log(`📝 提交 ${index + 1}/${commits.length}:`);
+      console.log(`   提交哈希: ${commit.hash}`);
+      console.log(`   提交作者: ${commit.author}`);
+      console.log(`   提交日期: ${commit.date}`);
+      console.log(`   提交信息: ${commit.message}`);
+      if (commit.files.length > 0) {
+        console.log(`   修改文件: ${commit.files.slice(0, 3).join(', ')}${commit.files.length > 3 ? '...' : ''}`);
+      }
+      console.log('');
+    });
+    
+    return commits;
+  } catch (err) {
+    console.error('❌ 获取Git提交记录失败：', err.message);
+    return [];
+  }
+}
+
+// ==================== 初始化 DeepSeek 客户端 ====================
+const openai = new OpenAI({
+  baseURL: 'https://api.deepseek.com',
+  apiKey: process.env.DEEPSEEK_API_KEY
+});
+
+// ==================== 工具函数：DeepSeek AI解析 ====================
+/**
+ * 调用DeepSeek API解析提交信息
+ * @param {string} commitMessage - Git提交信息
+ * @returns {Object} 解析后的结构化数据
+ */
+async function parseCommitWithDeepSeek(commitMessage) {
+  const prompt = `请严格按照以下要求解析代码提交信息：
+  1. 输出格式：必须是JSON字符串，无其他多余内容
+  2. 字段说明：
+     - 类型："任务"或"问题"（修复bug、解决异常属于"问题"；开发新功能、优化代码属于"任务"）
+     - 分类：任务/问题的具体分类（例如：开发新功能、修复生产bug、优化性能、文档更新等）
+     - 描述：简化为10-30字的具体工作内容（去除冗余词汇）
+     - 关联ID：提取需求号/BUG号（如#123则为"123"，无则为"无"）
+  
+  提交信息：${commitMessage}
+  示例输出：{"类型": "任务", "分类": "开发新功能", "描述": "实现用户登录页验证码功能", "关联ID": "REQ-456"}`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: config.deepseekModel,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.1, // 低随机性，确保格式稳定
+      max_tokens: 200
+    });
+
+    const result = completion.choices[0].message.content.trim();
+    return JSON.parse(result);
+  } catch (err) {
+    console.error(`❌ DeepSeek解析失败（消息：${commitMessage.substring(0, 20)}...）：`, 
+      err.message);
+    // 解析失败时降级处理
+    return {
+      类型: '任务',
+      分类: '未分类',
+      描述: commitMessage.substring(0, 50), // 截断过长描述
+      关联ID: '无'
+    };
+  }
+}
+
+// ==================== 工具函数：处理提交记录为周报数据 ====================
+/**
+ * 将Git提交记录转换为周报所需的任务和问题数据
+ * @param {Array} commits - Git提交记录数组
+ * @returns {Object} { tasks: 重点任务数组, problems: 日常问题数组 }
+ */
+async function processCommits(commits) {
+  const tasks = []; // 重点任务跟进项
+  const problems = []; // 日常工作遇到的问题
+
+  for (const [index, commit] of commits.entries()) {
+    console.log(`🔍 解析第 ${index + 1}/${commits.length} 条提交...`);
+    const parsed = await parseCommitWithDeepSeek(commit.message);
+
+    if (parsed.类型 === '任务') {
+      // 重点任务：适配模板中的字段
+      tasks.push({
+        序号: tasks.length + 1,
+        重点需求或任务: parsed.分类,
+        事项说明: parsed.描述,
+        启动日期: commit.date,
+        预计完成日期: commit.date, // 假设提交即完成，可根据实际调整
+        负责人: config.userName,
+        协同人或部门: '无', // 可根据团队规则扩展
+        完成进度: '100%',
+        备注: `关联ID: ${parsed.关联ID}`
+      });
+    } else {
+      // 日常问题：适配模板中的字段
+      problems.push({
+        序号: problems.length + 1,
+        问题分类: parsed.分类,
+        具体描述: parsed.描述,
+        提出日期: commit.date,
+        解决方案: '已修复/处理', // 可根据实际调整
+        解决日期: commit.date
+      });
+    }
+  }
+
+  return { tasks, problems };
+}
+
+// ==================== 工具函数：填充Excel模板 ====================
+/**
+ * 将处理后的数据填充到Excel模板并生成最终周报
+ * @param {Array} tasks - 重点任务数组
+ * @param {Array} problems - 日常问题数组
+ */
+async function generateExcel(tasks, problems) {
+  // 检查模板文件是否存在
+  if (!fs.existsSync(config.templatePath)) {
+    throw new Error(`❌ 模板文件不存在：${config.templatePath}`);
+  }
+
+  // 读取模板
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(config.templatePath);
+  const worksheet = workbook.getWorksheet(1); // 获取第一个工作表
+
+  // 1. 更新周报标题
+  const { year, month, startStr, endStr } = getThisWeekRange();
+  const title = `${config.userName} ${year}年${month}月${startStr}-${endStr}工作周报`;
+  worksheet.getCell(`A${config.templateRows.titleRow}`).value = title;
+  console.log(`📝 周报标题：${title}`);
+
+  // 2. 填充重点任务表格
+  tasks.forEach((task, index) => {
+    const rowNum = config.templateRows.taskStartRow + index;
+    const row = worksheet.getRow(rowNum);
+    row.getCell(1).value = task.序号; // A列：序号
+    row.getCell(2).value = task.重点需求或任务; // B列：重点需求/任务
+    row.getCell(3).value = task.事项说明; // C列：事项说明
+    row.getCell(4).value = task.启动日期; // D列：启动日期
+    row.getCell(5).value = task.预计完成日期; // E列：预计完成日期
+    row.getCell(6).value = task.负责人; // F列：负责人
+    row.getCell(7).value = task.协同人或部门; // G列：协同人/部门
+    row.getCell(8).value = task.完成进度; // H列：完成进度
+    row.getCell(9).value = task.备注; // I列：备注
+  });
+  console.log(`✅ 已填充 ${tasks.length} 条重点任务`);
+
+  // 3. 填充日常问题表格
+  problems.forEach((problem, index) => {
+    const rowNum = config.templateRows.problemStartRow + index;
+    const row = worksheet.getRow(rowNum);
+    row.getCell(1).value = problem.序号; // A列：序号
+    row.getCell(2).value = problem.问题分类; // B列：问题分类
+    row.getCell(3).value = problem.具体描述; // C列：具体描述
+    row.getCell(4).value = problem.提出日期; // D列：提出日期
+    row.getCell(5).value = problem.解决方案; // E列：解决方案
+    row.getCell(6).value = problem.解决日期; // F列：解决日期
+  });
+  console.log(`✅ 已填充 ${problems.length} 条日常问题`);
+
+  // 保存文件
+  await workbook.xlsx.writeFile(config.outputPath);
+  console.log(`🎉 周报生成成功！路径：${config.outputPath}`);
+}
+
+// ==================== 主函数 ====================
+async function main() {
+  try {
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`🚀 周报生成器 - 命令行版本`);
+    console.log(`${'='.repeat(60)}\n`);
+    
+    // 1. 检查DeepSeek API密钥
+    if (!process.env.DEEPSEEK_API_KEY) {
+      console.error('❌ 错误: 未设置 DEEPSEEK_API_KEY 环境变量');
+      console.error('   请先设置环境变量：');
+      console.error('   export DEEPSEEK_API_KEY="sk-your-api-key-here"\n');
+      process.exit(1);
+    }
+
+    // 2. 获取Git提交记录
+    const commits = getGitCommits();
+    if (commits.length === 0) {
+      console.log('ℹ️ 本周（周一至周五）无提交记录，无需生成周报\n');
+      return;
+    }
+
+    // 3. 解析并处理提交记录
+    const { tasks, problems } = await processCommits(commits);
+
+    // 4. 生成Excel周报
+    await generateExcel(tasks, problems);
+
+  } catch (err) {
+    console.error('❌ 程序执行失败：', err.message);
+    process.exit(1);
+  }
+}
+
+// 启动程序
+main();
