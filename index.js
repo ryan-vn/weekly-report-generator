@@ -312,58 +312,6 @@ ${commitSummary}
   }
 }
 
-/**
- * 调用DeepSeek API解析单个提交信息（旧方法，保留作为备用）
- * @param {string} commitMessage - Git提交信息
- * @param {string} projectName - 项目名称
- * @returns {Object} 解析后的结构化数据
- */
-async function parseCommitWithDeepSeek(commitMessage, projectName) {
-  console.log(`🤖 调用 DeepSeek AI 解析: [${projectName}] ${commitMessage.substring(0, 50)}...`);
-  
-  const prompt = `请严格按照以下要求解析代码提交信息：
-  1. 输出格式：必须是JSON字符串，无其他多余内容
-  2. 字段说明：
-     - 类型："任务"或"问题"（修复bug、解决异常属于"问题"；开发新功能、优化代码属于"任务"）
-     - 分类：任务/问题的具体分类（例如：开发新功能、修复生产bug、优化性能、文档更新等）
-     - 描述：简化为10-30字的具体工作内容（去除冗余词汇）
-     - 关联ID：提取需求号/BUG号（如#123则为"123"，无则为"无"）
-  
-  提交信息：${commitMessage}
-  示例输出：{"类型": "任务", "分类": "开发新功能", "描述": "实现用户登录页验证码功能", "关联ID": "REQ-456"}`;
-
-  try {
-    const startTime = Date.now();
-    
-    const completion = await openai.chat.completions.create({
-      model: config.deepseekModel,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.1, // 低随机性，确保格式稳定
-      max_tokens: 200
-    });
-
-    const result = completion.choices[0].message.content.trim();
-    const parsed = JSON.parse(result);
-    
-    const duration = Date.now() - startTime;
-    console.log(`   ✅ AI 解析完成 (耗时: ${duration}ms) -> ${parsed.描述}`);
-    
-    return parsed;
-  } catch (err) {
-    console.error(`   ❌ DeepSeek API 调用失败（${projectName}）：`, err.message);
-    // 解析失败时降级处理
-    const fallback = {
-      类型: '任务',
-      分类: '未分类',
-      描述: commitMessage.substring(0, 50), // 截断过长描述
-      关联ID: '无'
-    };
-    
-    console.log(`   ⚠️  使用降级方案: ${fallback.描述}`);
-    return fallback;
-  }
-}
-
 // ==================== 工具函数：处理提交记录为周报数据 ====================
 /**
  * 将Git提交记录转换为周报所需的任务和问题数据（智能模块聚合版本）

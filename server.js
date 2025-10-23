@@ -55,24 +55,21 @@ async function sendEmail(to, cc, subject, html, attachmentPath, attachmentName, 
       throw new Error(`附件文件不存在: ${attachmentPath}`);
     }
     
-    // 读取文件内容
-    const fileContent = fs.readFileSync(attachmentPath);
     const fileStats = fs.statSync(attachmentPath);
     const fileSizeKB = (fileStats.size / 1024).toFixed(2);
     
+    // 使用标准的nodemailer附件配置（方案1：path方式）
     const mailOptions = {
-      from: {
-        name: fromName || process.env.MAIL_FROM_NAME || '周报生成器',
-        address: process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER
-      },
+      from: `"${fromName || process.env.MAIL_FROM_NAME || '周报生成器'}" <${process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER}>`,
       to: to,
       cc: cc,
       subject: subject,
-      html: html,
+      text: ' ', // 纯文本内容
+      html: html || ' ', // HTML内容
       attachments: [
         {
           filename: attachmentName,
-          content: fileContent,
+          path: attachmentPath,
           contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         }
       ]
@@ -86,9 +83,12 @@ async function sendEmail(to, cc, subject, html, attachmentPath, attachmentName, 
     console.log(`   📝 主题: ${subject}`);
     console.log(`   📎 附件: ${attachmentName} (${fileSizeKB} KB)`);
     console.log(`   📂 附件路径: ${attachmentPath}`);
-    console.log(`   📦 附件大小: ${fileContent.length} bytes`);
+    console.log(`   📦 附件大小: ${fileStats.size} bytes`);
     console.log(`   🖥️  SMTP服务器: ${process.env.SMTP_HOST}:${process.env.SMTP_PORT}`);
     console.log(`   👤 发件人: ${fromName || '周报生成器'} <${process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER}>`);
+    
+    // 验证附件配置
+    console.log(`   🔍 附件配置: ${JSON.stringify(mailOptions.attachments)}`);
     
     const result = await transporter.sendMail(mailOptions);
     
