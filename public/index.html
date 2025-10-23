@@ -56,13 +56,41 @@
         }
 
         input[type="text"],
-        input[type="date"] {
+        input[type="date"],
+        input[type="email"],
+        textarea {
             width: 100%;
             padding: 12px;
             border: 2px solid #e0e0e0;
             border-radius: 8px;
             font-size: 14px;
             transition: border-color 0.3s;
+            box-sizing: border-box;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-hint {
+            color: #666;
+            font-size: 12px;
+            margin-top: 4px;
+            display: block;
+        }
+
+        .email-config {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 10px;
+        }
+
+        .email-config label {
+            font-weight: 600;
+            color: #1976d2;
         }
 
         input:focus {
@@ -536,6 +564,38 @@
                     <div class="tip">
                         💡 提示：请输入Git项目的绝对路径，可以添加多个项目一起生成周报<br>
                         📝 已添加 <span id="projectCount">0</span> 个项目
+                    </div>
+                </div>
+
+                <!-- 邮件发送配置 -->
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="emailEnabled" onchange="toggleEmailConfig()">
+                        📧 自动发送邮件
+                    </label>
+                </div>
+
+                <div id="emailConfig" class="email-config" style="display: none;">
+                    <div class="form-group">
+                        <label for="emailTo">📬 收件人</label>
+                        <input type="email" id="emailTo" placeholder="manager@example.com" multiple>
+                        <small class="form-hint">多个邮箱用逗号分隔</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="emailCc">📋 抄送</label>
+                        <input type="email" id="emailCc" placeholder="team@example.com,hr@example.com" multiple>
+                        <small class="form-hint">多个邮箱用逗号分隔，可选</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="emailSubject">📝 邮件主题</label>
+                        <input type="text" id="emailSubject" placeholder="自动生成，可自定义">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="emailContent">📄 邮件内容</label>
+                        <textarea id="emailContent" rows="4" placeholder="自动生成，可自定义"></textarea>
                     </div>
                 </div>
 
@@ -1174,21 +1234,52 @@
             });
         }
 
+        // 切换邮件配置显示
+        function toggleEmailConfig() {
+            const emailEnabled = document.getElementById('emailEnabled');
+            const emailConfig = document.getElementById('emailConfig');
+            
+            if (emailEnabled.checked) {
+                emailConfig.style.display = 'block';
+            } else {
+                emailConfig.style.display = 'none';
+            }
+        }
+
         // 下载Excel
         async function downloadExcel() {
             try {
+                // 获取邮件配置
+                const emailConfig = {
+                    enabled: document.getElementById('emailEnabled').checked,
+                    to: document.getElementById('emailTo').value,
+                    cc: document.getElementById('emailCc').value,
+                    subject: document.getElementById('emailSubject').value,
+                    content: document.getElementById('emailContent').value
+                };
+
                 const response = await fetch('/api/generate-excel', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(currentReportData)
+                    body: JSON.stringify({
+                        ...currentReportData,
+                        emailConfig: emailConfig
+                    })
                 });
 
                 const result = await response.json();
                 
                 if (result.success) {
-                    showAlert('✅ Excel文件生成成功！', 'success');
+                    let message = '✅ Excel文件生成成功！';
+                    if (result.emailSent) {
+                        message += '\n📧 邮件已发送！';
+                    } else if (emailConfig.enabled) {
+                        message += '\n⚠️ 邮件发送失败，请检查邮件配置';
+                    }
+                    
+                    showAlert(message, 'success');
                     // 下载文件
                     window.location.href = result.downloadUrl;
                 } else {

@@ -1,5 +1,4 @@
 // 加载环境变量配置（必须在最开头）
-require('dotenv').config();
 
 const ExcelJS = require('exceljs');
 const { execSync } = require('child_process');

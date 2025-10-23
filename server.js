@@ -8,6 +8,7 @@ const { startOfWeek, endOfWeek, format, parseISO } = require('date-fns');
 const OpenAI = require('openai');
 const fs = require('fs');
 const path = require('path');
+const nodemailer = require('nodemailer');
 
 const app = express();
 const PORT = 3000;
@@ -15,6 +16,71 @@ const PORT = 3000;
 // 中间件
 app.use(express.json());
 app.use(express.static('public'));
+
+// ==================== 邮件服务配置 ====================
+/**
+ * 创建邮件传输器
+ */
+function createMailTransporter() {
+  const transporter = nodemailer.createTransporter({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT) || 587,
+    secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS
+    }
+  });
+  
+  return transporter;
+}
+
+/**
+ * 发送邮件
+ * @param {string} to - 收件人邮箱
+ * @param {string} cc - 抄送邮箱（可选）
+ * @param {string} subject - 邮件主题
+ * @param {string} html - 邮件内容（HTML格式）
+ * @param {string} attachmentPath - 附件路径
+ * @param {string} attachmentName - 附件名称
+ */
+async function sendEmail(to, cc, subject, html, attachmentPath, attachmentName) {
+  try {
+    const transporter = createMailTransporter();
+    
+    const mailOptions = {
+      from: {
+        name: process.env.MAIL_FROM_NAME || '周报生成器',
+        address: process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER
+      },
+      to: to,
+      cc: cc,
+      subject: subject,
+      html: html,
+      attachments: [
+        {
+          filename: attachmentName,
+          path: attachmentPath,
+          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        }
+      ]
+    };
+    
+    console.log(`📧 正在发送邮件...`);
+    console.log(`   收件人: ${to}`);
+    console.log(`   抄送: ${cc || '无'}`);
+    console.log(`   主题: ${subject}`);
+    console.log(`   附件: ${attachmentName}`);
+    
+    const result = await transporter.sendMail(mailOptions);
+    console.log(`✅ 邮件发送成功！消息ID: ${result.messageId}`);
+    
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error(`❌ 邮件发送失败:`, error.message);
+    return { success: false, error: error.message };
+  }
+}
 
 // 初始化 DeepSeek 客户端
 const openai = new OpenAI({
@@ -758,7 +824,7 @@ app.get('/api/reports', (req, res) => {
  */
 app.post('/api/generate-excel', async (req, res) => {
   try {
-    const { userName, title, tasks, problems, dateRange } = req.body;
+    const { userName, title, tasks, problems, dateRange, emailConfig } = req.body;
     
     // 如果没有userName，从title中提取
     let finalUserName = userName;
@@ -789,11 +855,46 @@ app.post('/api/generate-excel', async (req, res) => {
 
     await generateExcel(finalUserName, tasks, problems, dateRange.start, dateRange.end, outputPath);
 
+    // 邮件发送结果
+    let emailResult = null;
+    
+    // 如果配置了邮件发送
+    if (emailConfig && emailConfig.enabled) {
+      const { to, cc, subject, content } = emailConfig;
+      
+      if (to && to.trim()) {
+        // 构建邮件内容
+        const emailSubject = subject || `${finalUserName} ${startStr}-${endStr} 工作周报`;
+        const emailContent = content || `
+          <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+            <h2 style="color: #1976d2;">📊 工作周报</h2>
+            <p>您好，</p>
+            <p>附件是 <strong>${finalUserName}</strong> 的 ${startStr}-${endStr} 工作周报，请查收。</p>
+            <p>周报包含以下内容：</p>
+            <ul>
+              <li>📝 重点任务跟进：${tasks.length} 项</li>
+              <li>📅 时间范围：${startStr} - ${endStr}</li>
+              <li>👤 负责人：${finalUserName}</li>
+            </ul>
+            <p>如有疑问，请随时联系。</p>
+            <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+            <p style="color: #666; font-size: 12px;">
+              此邮件由周报生成器自动发送，请勿回复。
+            </p>
+          </div>
+        `;
+        
+        emailResult = await sendEmail(to, cc, emailSubject, emailContent, outputPath, fileName);
+      }
+    }
+
     res.json({
       success: true,
       message: 'Excel文件生成成功',
       fileName,
-      downloadUrl: `/download/${fileName}`
+      downloadUrl: `/download/${fileName}`,
+      emailSent: emailResult ? emailResult.success : false,
+      emailResult: emailResult
     });
 
   } catch (err) {

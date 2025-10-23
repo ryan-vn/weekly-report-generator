@@ -1,20 +1,17 @@
 # 📊 周报生成器
 
-基于 Git 提交记录自动生成工作周报，支持多项目、可视化界面。
+一个基于 Git 提交记录和 DeepSeek AI 的智能周报生成工具，支持 Web 界面和命令行模式。
 
-## ✨ 功能特点
+## ✨ 主要功能
 
-- 🎯 支持多个 Git 项目同时生成周报
-- 🤖 使用 DeepSeek AI 智能解析提交信息
-- 🎨 现代化的 Web 可视化界面
-- 📁 **系统文件浏览器集成**（支持 macOS/Windows/Linux）
-- 📅 智能日期范围（默认本周周一至周五工作日）
-- 🖥️ **详细的控制台输出**（显示所有 Git 提交记录）
-- 📥 历史周报管理与下载
-- 📝 自动分类任务和问题
-- 📊 基于 Excel 模板生成周报
-- 🎨 **完整的颜色一致性**（绿色表头、红色标题、白色数据区）
-- 💾 **智能缓存功能**（自动保存姓名和项目路径，无需重复输入）
+- 🤖 **智能分析**: 使用 DeepSeek AI 分析 Git 提交记录，自动生成专业周报
+- 📊 **项目聚合**: 按项目分组，识别代码模块，将相关提交聚合成高质量任务
+- 🌐 **Web 界面**: 直观的 Web 界面，支持实时预览和编辑
+- 📧 **邮件发送**: 自动发送周报到指定邮箱
+- 📁 **多项目支持**: 支持同时分析多个 Git 项目
+- 📅 **灵活时间**: 支持自定义时间范围或使用本周
+- 📝 **Excel 输出**: 生成标准格式的 Excel 周报文件
+- 🔧 **配置管理**: 支持保存和恢复配置
 
 ## 🚀 快速开始
 
@@ -24,205 +21,255 @@
 npm install
 ```
 
-### 2. 配置 DeepSeek API Key（必须）
+### 2. 配置 API Key
 
-**推荐方式：使用 `.env` 文件**
+**推荐方式：使用 .env 文件**
 
+1. 复制环境变量模板：
 ```bash
-# 复制模板文件
 cp .env.example .env
-
-# 编辑 .env 文件，将 sk-your-api-key-here 替换为你的真实 API Key
-# DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxx
 ```
 
-**备选方式：设置环境变量**
-
+2. 编辑 `.env` 文件，填入你的 DeepSeek API Key：
 ```bash
-export DEEPSEEK_API_KEY="sk-your-api-key-here"
+# DeepSeek API 配置
+DEEPSEEK_API_KEY=sk-your-api-key-here
+
+# 邮件服务配置（可选）
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-email@example.com
+SMTP_PASS=your-email-password
+MAIL_FROM_NAME=周报生成器
+MAIL_FROM_EMAIL=your-email@example.com
+MAIL_TO_DEFAULT=manager@example.com
+MAIL_CC_DEFAULT=team@example.com,hr@example.com
 ```
 
-> 💡 获取 API Key：访问 https://platform.deepseek.com 注册并获取
-> 
-> ⚠️ **安全提示**：`.env` 文件已被 `.gitignore` 忽略，不会被提交到版本控制，请放心使用
+**获取 API Key**: 访问 [DeepSeek 平台](https://platform.deepseek.com) 获取 API Key
 
-### 3. 启动 Web 服务器
+### 3. 启动服务
 
 **方式一：使用启动脚本（推荐）**
-
 ```bash
+chmod +x start.sh
 ./start.sh
 ```
 
-启动脚本会自动检查环境变量并启动服务器。
-
 **方式二：直接启动**
-
 ```bash
-npm run server
+npm start
 ```
 
-> 💡 程序会自动从 `.env` 文件加载配置
+启动后访问：http://localhost:3000
 
-### 4. 打开浏览器
+## 📧 邮件配置
 
-访问：http://localhost:3000
+### SMTP 服务器配置
 
-## 📖 使用方法
+在 `.env` 文件中配置邮件服务器：
 
-### 方式一：可视化界面（推荐）
+```bash
+# SMTP 服务器设置
+SMTP_HOST=smtp.example.com        # 邮件服务器地址
+SMTP_PORT=587                     # 端口（587 或 465）
+SMTP_SECURE=false                 # 是否使用 SSL（465 端口设为 true）
+SMTP_USER=your-email@example.com  # 发送邮箱账号
+SMTP_PASS=your-email-password     # 邮箱密码或应用密码
 
-1. 在浏览器中打开 `http://localhost:3000`
-2. 输入周报负责人姓名
-3. 选择日期范围（留空则默认本周）
-4. 添加一个或多个 Git 项目路径
-   - **方式1**：点击"📁 浏览"按钮，通过系统文件选择器选择目录
-   - **方式2**：直接输入项目的绝对路径
-5. 点击"生成周报"按钮
-6. 等待处理完成后自动下载
+# 邮件发送设置
+MAIL_FROM_NAME=周报生成器         # 发件人名称
+MAIL_FROM_EMAIL=your-email@example.com  # 发件人邮箱
+MAIL_TO_DEFAULT=manager@example.com     # 默认收件人
+MAIL_CC_DEFAULT=team@example.com,hr@example.com  # 默认抄送
+```
 
-### 方式二：命令行模式
+### 常用邮件服务商配置
 
-如果需要使用原始的命令行方式：
+**Gmail**
+```bash
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-gmail@gmail.com
+SMTP_PASS=your-app-password  # 使用应用密码，不是登录密码
+```
 
-1. 确保已配置 `.env` 文件（参考上面的配置步骤）
-2. 修改 `config.json` 配置文件（或让程序自动生成）
-3. 运行：`npm start`
+**QQ 邮箱**
+```bash
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-qq@qq.com
+SMTP_PASS=your-authorization-code  # 使用授权码
+```
+
+**163 邮箱**
+```bash
+SMTP_HOST=smtp.163.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-email@163.com
+SMTP_PASS=your-authorization-code
+```
+
+### 邮件发送功能
+
+1. 在 Web 界面中勾选"📧 自动发送邮件"
+2. 填写收件人和抄送邮箱
+3. 自定义邮件主题和内容（可选）
+4. 生成周报时会自动发送邮件
+
+## 🎯 使用方式
+
+### Web 界面模式
+
+1. 访问 http://localhost:3000
+2. 填写周报负责人姓名
+3. 选择日期范围（留空默认本周）
+4. 添加 Git 项目路径
+5. 配置邮件发送（可选）
+6. 点击"生成周报"
+7. 预览和编辑周报内容
+8. 下载 Excel 文件
+
+### 命令行模式
+
+```bash
+node index.js
+```
+
+按提示输入：
+- 周报负责人姓名
+- 开始日期
+- 结束日期  
+- Git 项目路径
 
 ## 📁 项目结构
 
 ```
 weekly-report-generator/
-├── index.js              # 原始命令行版本
-├── server.js             # Web 服务器
-├── start.sh              # 启动脚本
-├── config.json           # 用户配置（自动生成）
-├── public/
-│   └── index.html        # 可视化界面
-├── output/               # 生成的周报存放目录
-├── 周报模版.xlsx         # Excel 模板
-├── .env.example          # 环境变量模板
-├── .env                  # 环境变量配置（需自行创建，不会被提交）
-├── .gitignore            # Git 忽略规则
-├── package.json          # 项目配置
-└── CHANGELOG.md          # 更新日志
+├── 📄 index.js              # 命令行版本
+├── 🌐 server.js             # Web 服务器
+├── 📱 public/index.html     # Web 界面
+├── ⚙️ config.json           # 配置文件
+├── 📋 周报模版.xlsx         # Excel 模板
+├── 📤 output/               # 输出目录
+├── 🔧 .env.example          # 环境变量模板
+├── 🚀 start.sh              # 启动脚本
+└── 📖 README.md             # 说明文档
 ```
 
 ## 🔧 配置说明
 
-### Excel 模板格式
+### config.json
 
-模板需要包含以下内容：
+```json
+{
+  "userName": "陈毅",
+  "projectPaths": [
+    "/Users/vincent/project/weekly-report-generator"
+  ],
+  "deepseekModel": "deepseek-chat",
+  "dateFormat": "yyyy年MM月dd日"
+}
+```
 
-- **标题行（第1行）**：会自动填充为"姓名 年月日期范围 工作周报"
-- **重点任务表格（第4行开始）**：包含序号、重点需求或任务、事项说明等列
-- **日常问题表格（第12行开始）**：包含序号、问题分类、具体描述等列
+### 环境变量优先级
 
-### 项目路径
+1. `.env` 文件中的 `DEEPSEEK_API_KEY`
+2. `config.json` 中的 `deepseekApiKey`
+3. 系统环境变量 `DEEPSEEK_API_KEY`
 
-- 必须是 Git 仓库的绝对路径
-- 示例：`/Users/username/projects/my-project`
-- 支持同时添加多个项目
+## 🤖 AI 分析特性
 
-**两种添加方式：**
+### 智能模块识别
+- 自动识别代码模块（用户模块、订单模块、支付模块等）
+- 根据文件路径和提交信息分析功能
 
-1. **使用文件浏览器**（推荐）
-   - 点击"📁 浏览"按钮
-   - 在弹出的系统文件选择器中选择目录
-   - 支持 macOS、Windows、Linux 系统
+### 任务聚合
+- 将同一模块的多次提交合并为一个任务
+- 生成专业、简洁的工作描述
+- 突出工作价值，避免技术细节
 
-2. **手动输入路径**
-   - 直接在输入框中粘贴或输入绝对路径
+### 分析示例
+```
+原始提交: 15 条
+↓ AI 智能分析
+生成任务: 3 条
+聚合率: 80%
+```
 
-## 🎯 AI 解析说明
+## 📊 输出格式
 
-系统会自动调用 DeepSeek AI 分析每条 Git 提交记录，并：
+### Excel 周报包含：
+- 序号
+- 重点需求或任务
+- 事项说明（包含关键改动）
+- 启动日期
+- 预计完成日期
+- 负责人
+- 协同人或部门
+- 完成进度
+- 备注
 
-- 判断是"任务"还是"问题"
-- 自动分类（开发新功能、修复bug、优化性能等）
-- 提取简洁的工作描述
-- 识别关联的需求/BUG编号
-
-## 📝 生成的周报包含
-
-1. **重点任务跟进**
-   - 序号、任务名称、事项说明
-   - 启动日期、完成日期、负责人
-   - 协同人、完成进度、备注
-
-2. **日常问题处理**
-   - 序号、问题分类、具体描述
-   - 提出日期、解决方案、解决日期
-
-## 🌟 界面特色
-
-- 📱 响应式设计，支持各种屏幕尺寸
-- 🎨 渐变紫色主题，视觉美观
-- ✨ 流畅的动画效果
-- 📂 项目路径管理（添加/删除）
-- 📜 历史周报列表与下载
-- ⚡ 实时状态提示
-
-## 🛠️ 技术栈
-
-- **后端**：Node.js + Express
-- **前端**：原生 HTML/CSS/JavaScript
-- **AI**：DeepSeek API (OpenAI SDK)
-- **Excel**：ExcelJS
-- **Git**：通过命令行调用
-
-## 🔧 命令说明
-
-- `./start.sh` - 使用启动脚本启动（自动检查环境变量）
-- `npm run server` - 直接启动 Web 服务器
-- `npm start` - 运行原命令行版本
+### 邮件内容：
+- 专业的 HTML 格式邮件
+- 自动生成邮件主题和内容
+- 支持自定义邮件内容
+- Excel 文件作为附件
 
 ## ❓ 常见问题
 
 ### Q: 如何获取 DeepSeek API Key？
+A: 访问 [DeepSeek 平台](https://platform.deepseek.com)，注册账号并创建 API Key。
 
-A: 访问 https://platform.deepseek.com 注册并获取 API Key
+### Q: 支持哪些邮件服务商？
+A: 支持所有标准 SMTP 服务商，包括 Gmail、QQ 邮箱、163 邮箱、企业邮箱等。
 
-### Q: 忘记设置 API Key 会怎样？
+### Q: 如何配置 Gmail？
+A: 需要开启两步验证并使用应用密码，不是登录密码。
 
-A: 程序会在启动时显示警告，生成周报时会因无法调用 DeepSeek API 而失败。请确保配置了 `.env` 文件或设置了环境变量。
+### Q: 邮件发送失败怎么办？
+A: 检查 SMTP 配置、网络连接、邮箱密码或授权码是否正确。
 
-### Q: .env 文件和环境变量哪个优先级更高？
+### Q: 可以同时分析多个项目吗？
+A: 可以，在项目路径中添加多个 Git 项目路径即可。
 
-A: 如果同时存在，环境变量的优先级更高。但推荐使用 `.env` 文件方式，更安全和方便。
+### Q: 如何自定义邮件内容？
+A: 在 Web 界面的邮件配置中可以自定义邮件主题和内容。
 
-### Q: 可以不填日期吗？
+## 🔒 安全提示
 
-A: 可以，留空会默认使用本周的周一到周日
+- ⚠️ **不要**将 `.env` 文件提交到版本控制系统
+- ✅ **使用** `.env.example` 作为配置模板
+- 🔐 **保护**你的 API Key 和邮箱密码
+- 🛡️ **定期**更换密码和 API Key
 
-### Q: 支持哪些 Git 平台？
+## 📝 更新日志
 
-A: 支持所有 Git 仓库（GitHub、GitLab、Gitee等），只要是本地 Git 项目即可
+### v2.0.0 - 智能分析升级
+- ✨ 新增按项目分组的智能分析模式
+- 🤖 AI 自动识别代码模块和功能
+- 📊 提交聚合，减少冗余任务
+- 📧 新增邮件自动发送功能
+- 🎨 优化 Web 界面和用户体验
 
-### Q: 生成的文件在哪里？
+### v1.0.0 - 基础功能
+- 🚀 基础周报生成功能
+- 📊 Excel 文件输出
+- 🌐 Web 界面支持
+- 📁 多项目分析
 
-A: 在项目根目录下的 `output/` 文件夹中
+## 📄 许可证
 
-### Q: 文件浏览器在 Linux 上无法使用？
+MIT License
 
-A: Linux 系统需要安装 zenity 工具：
-```bash
-sudo apt-get install zenity  # Debian/Ubuntu
-sudo yum install zenity       # CentOS/RHEL
-```
+## 🤝 贡献
 
-### Q: 点击"浏览"按钮没有反应？
+欢迎提交 Issue 和 Pull Request！
 
-A: 
-- 确保服务器正在运行
-- 检查浏览器控制台是否有错误信息
-- macOS 可能需要授予终端访问文件权限（系统偏好设置 > 安全性与隐私）
+---
 
-## 📄 License
-
-MIT
-
-## 👨‍💻 作者
-
-陈毅
-
+**享受智能周报生成的便利！** 🎉
