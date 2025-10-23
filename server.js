@@ -22,7 +22,7 @@ app.use(express.static('public'));
  * 创建邮件传输器
  */
 function createMailTransporter() {
-  const transporter = nodemailer.createTransporter({
+  const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT) || 587,
     secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
@@ -43,14 +43,26 @@ function createMailTransporter() {
  * @param {string} html - 邮件内容（HTML格式）
  * @param {string} attachmentPath - 附件路径
  * @param {string} attachmentName - 附件名称
+ * @param {string} fromName - 发件人显示名称（可选）
  */
-async function sendEmail(to, cc, subject, html, attachmentPath, attachmentName) {
+async function sendEmail(to, cc, subject, html, attachmentPath, attachmentName, fromName) {
   try {
     const transporter = createMailTransporter();
     
+    // 检查附件文件是否存在并读取内容
+    const fs = require('fs');
+    if (!fs.existsSync(attachmentPath)) {
+      throw new Error(`附件文件不存在: ${attachmentPath}`);
+    }
+    
+    // 读取文件内容
+    const fileContent = fs.readFileSync(attachmentPath);
+    const fileStats = fs.statSync(attachmentPath);
+    const fileSizeKB = (fileStats.size / 1024).toFixed(2);
+    
     const mailOptions = {
       from: {
-        name: process.env.MAIL_FROM_NAME || '周报生成器',
+        name: fromName || process.env.MAIL_FROM_NAME || '周报生成器',
         address: process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER
       },
       to: to,
@@ -60,25 +72,53 @@ async function sendEmail(to, cc, subject, html, attachmentPath, attachmentName) 
       attachments: [
         {
           filename: attachmentName,
-          path: attachmentPath,
+          content: fileContent,
           contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         }
       ]
     };
     
+    console.log(`\n${'='.repeat(60)}`);
     console.log(`📧 正在发送邮件...`);
-    console.log(`   收件人: ${to}`);
-    console.log(`   抄送: ${cc || '无'}`);
-    console.log(`   主题: ${subject}`);
-    console.log(`   附件: ${attachmentName}`);
+    console.log(`${'='.repeat(60)}`);
+    console.log(`   📬 收件人: ${to}`);
+    console.log(`   📋 抄送: ${cc || '无'}`);
+    console.log(`   📝 主题: ${subject}`);
+    console.log(`   📎 附件: ${attachmentName} (${fileSizeKB} KB)`);
+    console.log(`   📂 附件路径: ${attachmentPath}`);
+    console.log(`   📦 附件大小: ${fileContent.length} bytes`);
+    console.log(`   🖥️  SMTP服务器: ${process.env.SMTP_HOST}:${process.env.SMTP_PORT}`);
+    console.log(`   👤 发件人: ${fromName || '周报生成器'} <${process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER}>`);
     
     const result = await transporter.sendMail(mailOptions);
-    console.log(`✅ 邮件发送成功！消息ID: ${result.messageId}`);
+    
+    console.log(`${'='.repeat(60)}`);
+    console.log(`✅ 邮件发送成功！`);
+    console.log(`${'='.repeat(60)}`);
+    console.log(`   📧 消息ID: ${result.messageId}`);
+    console.log(`   📬 已发送给: ${to}`);
+    console.log(`   ⏰ 发送时间: ${new Date().toLocaleString('zh-CN')}`);
+    console.log(`${'='.repeat(60)}\n`);
     
     return { success: true, messageId: result.messageId };
   } catch (error) {
-    console.error(`❌ 邮件发送失败:`, error.message);
-    return { success: false, error: error.message };
+    console.error(`\n${'='.repeat(60)}`);
+    console.error(`❌ 邮件发送失败`);
+    console.error(`${'='.repeat(60)}`);
+    console.error(`   错误信息: ${error.message}`);
+    console.error(`   错误代码: ${error.code || '未知'}`);
+    console.error(`   SMTP服务器: ${process.env.SMTP_HOST || '未配置'}`);
+    console.error(`   SMTP端口: ${process.env.SMTP_PORT || '未配置'}`);
+    console.error(`   发件账号: ${process.env.SMTP_USER || '未配置'}`);
+    console.error(`${'='.repeat(60)}\n`);
+    console.error(`💡 提示：请检查 .env 文件中的 SMTP 配置是否正确`);
+    console.error(`   - SMTP_HOST: SMTP服务器地址（例如：smtp.qiye.aliyun.com）`);
+    console.error(`   - SMTP_PORT: SMTP端口（SSL通常为465，TLS通常为587）`);
+    console.error(`   - SMTP_SECURE: 是否使用SSL（465端口时为true）`);
+    console.error(`   - SMTP_USER: 发件邮箱账号`);
+    console.error(`   - SMTP_PASS: 邮箱密码或授权码\n`);
+    
+    return { success: false, error: error.message, code: error.code };
   }
 }
 
@@ -825,6 +865,76 @@ app.post('/api/config', (req, res) => {
 });
 
 /**
+ * 获取邮件配置API
+ */
+app.get('/api/email-config', (req, res) => {
+  try {
+    const emailConfig = {
+      to: process.env.MAIL_TO_DEFAULT || '',
+      cc: process.env.MAIL_CC_DEFAULT || '',
+      fromName: process.env.MAIL_FROM_NAME || '周报生成器',
+      fromEmail: process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER || '',
+      smtpConfigured: !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS)
+    };
+    res.json({ success: true, config: emailConfig });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * 保存邮件配置到.env文件
+ */
+app.post('/api/email-config', (req, res) => {
+  try {
+    const { to, cc } = req.body;
+    const envPath = path.join(__dirname, '.env');
+    
+    // 读取现有.env文件
+    let envContent = '';
+    if (fs.existsSync(envPath)) {
+      envContent = fs.readFileSync(envPath, 'utf8');
+    }
+    
+    // 更新或添加配置
+    const updateEnvVar = (content, key, value) => {
+      const regex = new RegExp(`^${key}=.*$`, 'm');
+      const newLine = `${key}=${value}`;
+      
+      if (regex.test(content)) {
+        // 更新现有值
+        return content.replace(regex, newLine);
+      } else {
+        // 添加新值
+        return content + `\n${newLine}`;
+      }
+    };
+    
+    if (to !== undefined) {
+      envContent = updateEnvVar(envContent, 'MAIL_TO_DEFAULT', to);
+      process.env.MAIL_TO_DEFAULT = to;
+    }
+    
+    if (cc !== undefined) {
+      envContent = updateEnvVar(envContent, 'MAIL_CC_DEFAULT', cc);
+      process.env.MAIL_CC_DEFAULT = cc;
+    }
+    
+    // 写回.env文件
+    fs.writeFileSync(envPath, envContent);
+    
+    console.log(`✅ 邮件配置已更新到 .env 文件`);
+    console.log(`   默认收件人: ${to || '(空)'}`);
+    console.log(`   默认抄送: ${cc || '(空)'}`);
+    
+    res.json({ success: true, message: '邮件配置已保存' });
+  } catch (err) {
+    console.error('❌ 保存邮件配置失败:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * 浏览目录API - 打开系统文件选择器
  */
 app.get('/api/browse-directory', async (req, res) => {
@@ -1064,8 +1174,10 @@ app.post('/api/generate-excel', async (req, res) => {
         const emailSubject = subject || fileName.replace('.xlsx', '');
         // 邮件内容简化：只发送附件，内容留空或使用自定义内容
         const emailContent = content || '';
+        // 发件人显示名称使用用户名
+        const dynamicFromName = finalUserName;
         
-        emailResult = await sendEmail(to, cc, emailSubject, emailContent, outputPath, fileName);
+        emailResult = await sendEmail(to, cc, emailSubject, emailContent, outputPath, fileName, dynamicFromName);
       }
     }
 

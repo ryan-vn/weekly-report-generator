@@ -1270,6 +1270,11 @@
                 }
             };
 
+            // 发送邮件按钮
+            document.getElementById('sendEmailBtn').onclick = function() {
+                openEmailModal();
+            };
+
             // 下载Excel按钮
             document.getElementById('downloadBtn').onclick = function() {
                 downloadExcel();
@@ -1414,6 +1419,147 @@
                 }
             } catch (err) {
                 showAlert('❌ 下载失败: ' + err.message, 'error');
+            }
+        }
+
+        // 打开邮件发送弹窗
+        async function openEmailModal() {
+            // 从环境变量加载默认配置
+            try {
+                const response = await fetch('/api/email-config');
+                const result = await response.json();
+                
+                if (result.success && result.config) {
+                    const config = result.config;
+                    
+                    // 检查SMTP是否已配置
+                    if (!config.smtpConfigured) {
+                        showAlert('⚠️ 邮件服务未配置，请先在 .env 文件中配置 SMTP 信息', 'warning');
+                    }
+                    
+                    // 填充默认值
+                    document.getElementById('modalEmailTo').value = config.to || '';
+                    document.getElementById('modalEmailCc').value = config.cc || '';
+                    document.getElementById('modalEmailSubject').value = '';
+                    document.getElementById('modalEmailContent').value = '';
+                    
+                    // 添加提示信息
+                    const toInput = document.getElementById('modalEmailTo');
+                    if (config.to) {
+                        toInput.placeholder = '默认: ' + config.to;
+                    }
+                    
+                    const ccInput = document.getElementById('modalEmailCc');
+                    if (config.cc) {
+                        ccInput.placeholder = '默认: ' + config.cc;
+                    }
+                }
+            } catch (err) {
+                console.error('加载邮件配置失败:', err);
+            }
+            
+            document.getElementById('emailModal').style.display = 'block';
+        }
+
+        // 关闭邮件发送弹窗
+        function closeEmailModal() {
+            document.getElementById('emailModal').style.display = 'none';
+        }
+
+        // 点击模态框外部关闭
+        window.onclick = function(event) {
+            const modal = document.getElementById('emailModal');
+            if (event.target === modal) {
+                closeEmailModal();
+            }
+        }
+
+        // 确认发送邮件
+        async function confirmSendEmail() {
+            const to = document.getElementById('modalEmailTo').value.trim();
+            const cc = document.getElementById('modalEmailCc').value.trim();
+            const subject = document.getElementById('modalEmailSubject').value.trim();
+            const content = document.getElementById('modalEmailContent').value.trim();
+
+            // 验证收件人
+            if (!to) {
+                showAlert('❌ 请填写收件人邮箱地址', 'error');
+                return;
+            }
+
+            // 确认发送
+            if (!confirm(`确认发送邮件给：${to}？`)) {
+                return;
+            }
+
+            try {
+                // 关闭模态框
+                closeEmailModal();
+                
+                // 显示加载提示
+                showAlert('📧 正在发送邮件...', 'info');
+
+                // 构建邮件配置
+                const emailConfig = {
+                    enabled: true,
+                    to: to,
+                    cc: cc,
+                    subject: subject,
+                    content: content
+                };
+
+                // 调用下载Excel API（同时会发送邮件）
+                const response = await fetch('/api/generate-excel', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        ...currentReportData,
+                        emailConfig: emailConfig
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    if (result.emailSent) {
+                        showAlert('✅ 邮件发送成功！', 'success');
+                        
+                        // 保存邮件配置到环境变量（异步，不等待结果）
+                        saveEmailConfig(to, cc);
+                        
+                        // 清空自定义内容（保留收件人和抄送）
+                        document.getElementById('modalEmailSubject').value = '';
+                        document.getElementById('modalEmailContent').value = '';
+                    } else {
+                        showAlert('⚠️ Excel生成成功，但邮件发送失败\n' + (result.emailResult?.error || '未知错误'), 'warning');
+                    }
+                } else {
+                    showAlert('❌ 操作失败: ' + result.error, 'error');
+                }
+            } catch (err) {
+                showAlert('❌ 发送失败: ' + err.message, 'error');
+            }
+        }
+
+        // 保存邮件配置到.env文件
+        async function saveEmailConfig(to, cc) {
+            try {
+                const response = await fetch('/api/email-config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ to, cc })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    console.log('✅ 邮件配置已保存到 .env 文件');
+                }
+            } catch (err) {
+                console.error('保存邮件配置失败:', err);
             }
         }
     </script>
