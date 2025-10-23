@@ -492,11 +492,44 @@ async function generateExcel(userName, tasks, problems, startDate, endDate, outp
   const title = `${userName} ${year}年${startStr}-${endStr}工作周报`;
   worksheet.getCell('C1').value = title;
 
-  // 填充重点任务表格 (A4:I7)
+  // 填充重点任务表格 (从A4开始，动态扩展)
   const taskStartRow = 4;
+  const taskTemplateRows = 4; // 模板预留的任务行数（4-7行）
+  
   tasks.forEach((task, index) => {
     const rowNum = taskStartRow + index;
-    if (rowNum > 7) return; // 限制在4行内
+    
+    // 如果超过模板预留的行数，需要插入新行
+    if (index >= taskTemplateRows) {
+      // 复制上一行的样式作为模板
+      const templateRow = worksheet.getRow(taskStartRow + taskTemplateRows - 1);
+      worksheet.insertRow(rowNum, []);
+      const newRow = worksheet.getRow(rowNum);
+      
+      // 复制样式
+      for (let j = 1; j <= 9; j++) {
+        const sourceCell = templateRow.getCell(j);
+        const targetCell = newRow.getCell(j);
+        
+        // 复制样式属性
+        if (sourceCell.style) {
+          targetCell.style = JSON.parse(JSON.stringify(sourceCell.style));
+        }
+        // 确保有边框和背景
+        targetCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFFFFFF' }
+        };
+        targetCell.border = {
+          top: { style: 'thin', color: { argb: 'FF000000' } },
+          left: { style: 'thin', color: { argb: 'FF000000' } },
+          bottom: { style: 'thin', color: { argb: 'FF000000' } },
+          right: { style: 'thin', color: { argb: 'FF000000' } }
+        };
+        targetCell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+      }
+    }
     
     const row = worksheet.getRow(rowNum);
 
@@ -511,13 +544,15 @@ async function generateExcel(userName, tasks, problems, startDate, endDate, outp
     row.getCell(8).value = task.完成进度;
     row.getCell(9).value = task.备注;
 
-    // 保持白色背景和边框，支持换行
+    // 设置样式
     for (let j = 1; j <= 9; j++) {
       const cell = row.getCell(j);
+      
+      // 确保有边框和背景
       cell.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFFFFFFF' } // 白色背景
+        fgColor: { argb: 'FFFFFFFF' }
       };
       cell.border = {
         top: { style: 'thin', color: { argb: 'FF000000' } },
@@ -543,13 +578,49 @@ async function generateExcel(userName, tasks, problems, startDate, endDate, outp
 
     row.commit(); // 提交行修改
   });
-  console.log(`✅ 已填充 ${Math.min(tasks.length, 4)} 条重点任务`);
+  console.log(`✅ 已填充 ${tasks.length} 条重点任务`);
 
-  // 填充日常问题表格
-  const problemStartRow = 15;
+  // 填充日常问题表格 (从第15行开始，动态扩展)
+  // 注意：由于可能插入了任务行，问题表格的起始行需要动态计算
+  const problemStartRowBase = 15;
+  const insertedTaskRows = Math.max(0, tasks.length - taskTemplateRows);
+  const problemStartRow = problemStartRowBase + insertedTaskRows;
+  const problemTemplateRows = 5; // 模板预留的问题行数（15-19行）
+  
   problems.forEach((problem, index) => {
     const rowNum = problemStartRow + index;
-    if (rowNum > 19) return; // 限制在5行内
+    
+    // 如果超过模板预留的行数，需要插入新行
+    if (index >= problemTemplateRows) {
+      // 复制上一行的样式作为模板
+      const templateRow = worksheet.getRow(problemStartRow + problemTemplateRows - 1);
+      worksheet.insertRow(rowNum, []);
+      const newRow = worksheet.getRow(rowNum);
+      
+      // 复制样式
+      for (let j = 1; j <= 6; j++) {
+        const sourceCell = templateRow.getCell(j);
+        const targetCell = newRow.getCell(j);
+        
+        // 复制样式属性
+        if (sourceCell.style) {
+          targetCell.style = JSON.parse(JSON.stringify(sourceCell.style));
+        }
+        // 确保有边框和背景
+        targetCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFFFFFF' }
+        };
+        targetCell.border = {
+          top: { style: 'thin', color: { argb: 'FF000000' } },
+          left: { style: 'thin', color: { argb: 'FF000000' } },
+          bottom: { style: 'thin', color: { argb: 'FF000000' } },
+          right: { style: 'thin', color: { argb: 'FF000000' } }
+        };
+        targetCell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+      }
+    }
     
     const row = worksheet.getRow(rowNum);
     
@@ -561,13 +632,13 @@ async function generateExcel(userName, tasks, problems, startDate, endDate, outp
     row.getCell(5).value = problem.解决方案;
     row.getCell(6).value = problem.解决日期;
 
-    // 保持白色背景和边框，支持换行
+    // 设置样式
     for (let j = 1; j <= 6; j++) {
       const cell = row.getCell(j);
       cell.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFFFFFFF' } // 白色背景
+        fgColor: { argb: 'FFFFFFFF' }
       };
       cell.border = {
         top: { style: 'thin', color: { argb: 'FF000000' } },
@@ -580,7 +651,7 @@ async function generateExcel(userName, tasks, problems, startDate, endDate, outp
     
     row.commit(); // 提交行修改
   });
-  console.log(`✅ 已填充 ${Math.min(problems.length, 5)} 条日常问题`);
+  console.log(`✅ 已填充 ${problems.length} 条日常问题`);
 
   await workbook.xlsx.writeFile(outputPath);
   console.log(`🎉 周报生成成功！路径：${outputPath}`);
