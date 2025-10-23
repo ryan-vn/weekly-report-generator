@@ -167,7 +167,7 @@ weekly-report-generator/
 
 ```json
 {
-  "userName": "陈毅",
+  "userName": "xx",
   "projectPaths": [
     "/Users/vincent/project/weekly-report-generator"
   ],
