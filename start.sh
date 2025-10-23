@@ -23,11 +23,54 @@ else
 fi
 
 echo ""
+echo "📦 检查并安装依赖..."
+if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules" ]; then
+    echo "   正在安装依赖包..."
+    npm install
+    if [ $? -eq 0 ]; then
+        echo "✅ 依赖安装完成"
+    else
+        echo "❌ 依赖安装失败，请检查网络连接和 npm 配置"
+        exit 1
+    fi
+else
+    echo "✅ 依赖已是最新版本"
+fi
+
+echo ""
 echo "📝 提示: 如果启动后提示缺少 API Key，请创建 .env 文件或设置环境变量"
 echo ""
 echo "启动 Web 服务器..."
 echo ""
 
 # 启动服务器（dotenv 会自动加载 .env 文件）
-npm run server
+npm run server &
+
+# 等待服务器启动
+echo "⏳ 等待服务器启动..."
+sleep 3
+
+# 自动打开浏览器
+echo "🌐 正在打开浏览器..."
+if command -v open >/dev/null 2>&1; then
+    # macOS
+    open http://localhost:3000
+elif command -v xdg-open >/dev/null 2>&1; then
+    # Linux
+    xdg-open http://localhost:3000
+elif command -v start >/dev/null 2>&1; then
+    # Windows (Git Bash)
+    start http://localhost:3000
+else
+    echo "⚠️  无法自动打开浏览器，请手动访问: http://localhost:3000"
+fi
+
+echo ""
+echo "✅ 服务器已启动，浏览器已打开"
+echo "   访问地址: http://localhost:3000"
+echo "   按 Ctrl+C 停止服务器"
+echo ""
+
+# 等待用户中断
+wait
 
