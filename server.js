@@ -186,8 +186,115 @@ function getGitCommits(projectPaths, startDate, endDate) {
   return allCommits;
 }
 
+// ==================== 工具函数：分组和聚合 ====================
 /**
- * 调用DeepSeek API解析提交信息
+ * 按项目分组提交记录
+ */
+function groupCommitsByProject(commits) {
+  const grouped = {};
+  commits.forEach(commit => {
+    if (!grouped[commit.project]) {
+      grouped[commit.project] = [];
+    }
+    grouped[commit.project].push(commit);
+  });
+  return grouped;
+}
+
+/**
+ * 智能分析项目的所有提交，按模块聚合并生成周报条目
+ */
+async function analyzeProjectCommits(projectName, commits) {
+  console.log(`🤖 [${projectName}] 正在分析 ${commits.length} 条提交记录...`);
+  
+  // 构建提交信息摘要，包含文件路径用于模块识别
+  const commitSummary = commits.map((commit, index) => {
+    const fileList = commit.files.slice(0, 5).join(', ');
+    const moreFiles = commit.files.length > 5 ? ` 等${commit.files.length}个文件` : '';
+    return `${index + 1}. [${commit.date}] ${commit.message}\n   修改文件: ${fileList}${moreFiles}`;
+  }).join('\n\n');
+
+  const prompt = `你是一个专业的技术周报生成助手。请分析以下项目的 Git 提交记录，智能识别代码模块和功能，将相关提交聚合成高质量的周报条目。
+
+项目名称: ${projectName}
+提交记录（共 ${commits.length} 条）:
+
+${commitSummary}
+
+分析要求:
+1. **模块识别**: 根据文件路径和提交信息，识别代码模块（如：用户模块、订单模块、支付模块等）
+2. **功能聚合**: 将同一模块或功能的多次提交合并为一个任务
+3. **工作描述**: 用专业、简洁的语言描述工作内容，避免过于技术化的细节且 让领导看到做了很多任务 而且同事看了任务很难实现
+4. **关键改动**: 总结该任务的主要改动点（2-4个要点）
+
+输出格式（必须是有效的 JSON 数组）:
+[
+  {
+    "模块": "模块或功能名称",
+    "分类": "开发新功能|修复bug|优化性能|代码重构|文档更新",
+    "描述": "简洁专业的工作描述（15-40字）",
+    "关键改动": ["改动点1", "改动点2", "改动点3"],
+    "涉及提交数": 提交数量
+  }
+]
+
+注意事项:
+- 如果多个提交属于同一功能开发，请合并为一条
+- 如果提交之间完全无关，可以分成多条
+- 描述要站在周报汇报的角度，突出工作价值
+- 避免使用"修复了一个bug"这样的模糊描述，要具体说明修复了什么问题
+
+请直接输出 JSON 数组，不要有其他内容。`;
+
+  try {
+    const startTime = Date.now();
+    
+    const completion = await openai.chat.completions.create({
+      model: 'deepseek-chat',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      max_tokens: 2000
+    });
+
+    const result = completion.choices[0].message.content.trim();
+    
+    // 尝试解析 JSON
+    let parsedTasks;
+    try {
+      const jsonContent = result.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      parsedTasks = JSON.parse(jsonContent);
+    } catch (parseError) {
+      console.error(`   ❌ JSON 解析失败，原始内容:\n${result}`);
+      throw parseError;
+    }
+    
+    const duration = Date.now() - startTime;
+    console.log(`   ✅ AI 分析完成 (耗时: ${duration}ms)`);
+    console.log(`   📊 识别出 ${parsedTasks.length} 个任务模块\n`);
+    
+    // 显示识别的模块
+    parsedTasks.forEach((task, index) => {
+      console.log(`   ${index + 1}. [${task.模块}] ${task.描述} (合并${task.涉及提交数}个提交)`);
+    });
+    
+    return parsedTasks;
+  } catch (err) {
+    console.error(`   ❌ DeepSeek API 调用失败:`, err.message);
+    
+    // 降级方案
+    console.log(`   ⚠️  使用降级方案: 按日期简单分组\n`);
+    return [{
+      模块: '未分类',
+      分类: '开发任务',
+      描述: `${projectName} 项目开发工作（${commits.length}个提交）`,
+      关键改动: commits.slice(0, 3).map(c => c.message),
+      涉及提交数: commits.length
+    }];
+  }
+}
+
+/**
+ * 调用DeepSeek API解析单个提交信息（旧方法，保留作为备用）
  */
 async function parseCommitWithDeepSeek(commitMessage, projectName) {
   console.log(`🤖 调用 DeepSeek AI 解析: [${projectName}] ${commitMessage.substring(0, 50)}...`);
@@ -235,33 +342,67 @@ async function parseCommitWithDeepSeek(commitMessage, projectName) {
 }
 
 /**
- * 处理提交记录为周报数据
+ * 处理提交记录为周报数据（智能模块聚合版本）
  */
 async function processCommits(commits, userName) {
   const tasks = [];
   const problems = []; // 保持空白，不填充任何内容
 
-  console.log(`\n📊 开始使用 DeepSeek AI 解析 ${commits.length} 条提交记录...\n`);
+  console.log(`\n${'='.repeat(70)}`);
+  console.log(`📊 智能分析模式：按项目分组，识别模块，聚合相关提交`);
+  console.log(`${'='.repeat(70)}\n`);
+  console.log(`📦 总提交数: ${commits.length} 条`);
   
-  for (const [index, commit] of commits.entries()) {
-    console.log(`\n[${index + 1}/${commits.length}] 处理提交: ${commit.hash} (${commit.date})`);
-    const parsed = await parseCommitWithDeepSeek(commit.message, commit.project);
+  // 按项目分组
+  const groupedCommits = groupCommitsByProject(commits);
+  const projectNames = Object.keys(groupedCommits);
+  console.log(`🗂️  涉及项目: ${projectNames.length} 个 (${projectNames.join(', ')})\n`);
 
-    // 所有AI生成的内容都放到重点任务表格中
-    tasks.push({
-      序号: tasks.length + 1,
-      重点需求或任务: parsed.分类,
-      事项说明: `[${commit.project}] ${parsed.描述}`,
-      启动日期: commit.date,
-      预计完成日期: commit.date,
-      负责人: userName,
-      协同人或部门: '无',
-      完成进度: '100%',
-      备注: '' // 备注栏为空
-    });
+  let taskNumber = 1;
+  
+  // 逐个项目进行智能分析
+  for (const [projectName, projectCommits] of Object.entries(groupedCommits)) {
+    console.log(`${'─'.repeat(70)}`);
+    console.log(`📁 项目: ${projectName} (${projectCommits.length} 个提交)`);
+    console.log(`${'─'.repeat(70)}\n`);
+    
+    // 调用 AI 智能分析该项目的所有提交
+    const projectTasks = await analyzeProjectCommits(projectName, projectCommits);
+    
+    // 将分析结果转换为周报格式
+    for (const task of projectTasks) {
+      // 计算日期范围
+      const dates = projectCommits.map(c => c.date).sort();
+      const startDate = dates[0];
+      const endDate = dates[dates.length - 1];
+      
+      // 构建详细的事项说明
+      const taskDescription = task.关键改动 && task.关键改动.length > 0
+        ? `${task.描述}\n关键改动:\n${task.关键改动.map(item => `• ${item}`).join('\n')}`
+        : task.描述;
+      
+      tasks.push({
+        序号: taskNumber++,
+        重点需求或任务: `[${projectName}] ${task.模块}`,
+        事项说明: taskDescription,
+        启动日期: startDate,
+        预计完成日期: endDate,
+        负责人: userName,
+        协同人或部门: '无',
+        完成进度: '100%',
+        备注: ''
+      });
+    }
+    
+    console.log('');
   }
 
-  console.log(`\n✅ DeepSeek AI 解析完成！共处理 ${commits.length} 条提交，生成 ${tasks.length} 条任务\n`);
+  console.log(`${'='.repeat(70)}`);
+  console.log(`✅ 分析完成！`);
+  console.log(`   📝 原始提交: ${commits.length} 条`);
+  console.log(`   📊 生成任务: ${tasks.length} 条`);
+  console.log(`   🎯 聚合率: ${((1 - tasks.length / commits.length) * 100).toFixed(1)}%`);
+  console.log(`${'='.repeat(70)}\n`);
 
   return { tasks, problems };
 }

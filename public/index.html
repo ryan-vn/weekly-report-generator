@@ -126,15 +126,17 @@
 
         .tasks-table, .problems-table {
             overflow-x: auto;
+            max-width: 100%;
         }
 
         .tasks-table table, .problems-table table {
-            width: 100%;
+            min-width: 1200px; /* 确保表格有足够宽度 */
             border-collapse: collapse;
             background: #fff;
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            table-layout: fixed; /* 固定表格布局 */
         }
 
         .tasks-table th, .problems-table th {
@@ -158,13 +160,27 @@
             background: transparent;
             padding: 4px;
             font-size: 12px;
-            resize: none;
+            resize: vertical;
         }
 
         .tasks-table textarea {
-            min-height: 60px;
-            line-height: 1.4;
+            min-height: 120px;
+            max-height: 400px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
         }
+        
+        /* 优化列宽 */
+        .tasks-table th:nth-child(1), .tasks-table td:nth-child(1) { width: 40px; } /* 序号 */
+        .tasks-table th:nth-child(2), .tasks-table td:nth-child(2) { width: 150px; } /* 重点需求或任务 */
+        .tasks-table th:nth-child(3), .tasks-table td:nth-child(3) { width: 350px; } /* 事项说明 - 加宽 */
+        .tasks-table th:nth-child(4), .tasks-table td:nth-child(4) { width: 90px; } /* 启动日期 */
+        .tasks-table th:nth-child(5), .tasks-table td:nth-child(5) { width: 90px; } /* 预计完成日期 */
+        .tasks-table th:nth-child(6), .tasks-table td:nth-child(6) { width: 70px; } /* 负责人 */
+        .tasks-table th:nth-child(7), .tasks-table td:nth-child(7) { width: 80px; } /* 协同人或部门 */
+        .tasks-table th:nth-child(8), .tasks-table td:nth-child(8) { width: 70px; } /* 完成进度 */
+        .tasks-table th:nth-child(9), .tasks-table td:nth-child(9) { width: 100px; } /* 备注 */
 
         .tasks-table input:focus, .tasks-table textarea:focus {
             outline: 2px solid #1976d2;
