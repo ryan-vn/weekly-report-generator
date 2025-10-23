@@ -19,8 +19,9 @@
         }
 
         .container {
-            max-width: 900px;
             margin: 0 auto;
+            padding: 0 20px;
+            max-width: 100%;
         }
 
         .card {
@@ -126,11 +127,25 @@
 
         .tasks-table, .problems-table {
             overflow-x: auto;
-            max-width: 100%;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        
+        /* 响应式设计 - 小屏幕优化 */
+        @media (max-width: 1400px) {
+            .tasks-table table, .problems-table table {
+                min-width: 1260px; /* 小屏幕时保持最小宽度 */
+            }
+        }
+        
+        @media (min-width: 1400px) {
+            .tasks-table table, .problems-table table {
+                min-width: auto; /* 大屏幕时自适应 */
+            }
         }
 
         .tasks-table table, .problems-table table {
-            min-width: 1200px; /* 确保表格有足够宽度 */
+            width: 100%;
             border-collapse: collapse;
             background: #fff;
             border-radius: 8px;
@@ -171,16 +186,61 @@
             word-wrap: break-word;
         }
         
-        /* 优化列宽 */
-        .tasks-table th:nth-child(1), .tasks-table td:nth-child(1) { width: 40px; } /* 序号 */
-        .tasks-table th:nth-child(2), .tasks-table td:nth-child(2) { width: 150px; } /* 重点需求或任务 */
-        .tasks-table th:nth-child(3), .tasks-table td:nth-child(3) { width: 350px; } /* 事项说明 - 加宽 */
-        .tasks-table th:nth-child(4), .tasks-table td:nth-child(4) { width: 90px; } /* 启动日期 */
-        .tasks-table th:nth-child(5), .tasks-table td:nth-child(5) { width: 90px; } /* 预计完成日期 */
-        .tasks-table th:nth-child(6), .tasks-table td:nth-child(6) { width: 70px; } /* 负责人 */
-        .tasks-table th:nth-child(7), .tasks-table td:nth-child(7) { width: 80px; } /* 协同人或部门 */
-        .tasks-table th:nth-child(8), .tasks-table td:nth-child(8) { width: 70px; } /* 完成进度 */
-        .tasks-table th:nth-child(9), .tasks-table td:nth-child(9) { width: 100px; } /* 备注 */
+        /* 优化列宽 - 响应式设计 */
+        .tasks-table th:nth-child(1), .tasks-table td:nth-child(1) { width: 5%; } /* 序号 */
+        .tasks-table th:nth-child(2), .tasks-table td:nth-child(2) { width: 15%; } /* 重点需求或任务 */
+        .tasks-table th:nth-child(3), .tasks-table td:nth-child(3) { width: 35%; } /* 事项说明 - 主要列 */
+        .tasks-table th:nth-child(4), .tasks-table td:nth-child(4) { width: 8%; } /* 启动日期 */
+        .tasks-table th:nth-child(5), .tasks-table td:nth-child(5) { width: 8%; } /* 预计完成日期 */
+        .tasks-table th:nth-child(6), .tasks-table td:nth-child(6) { width: 7%; } /* 负责人 */
+        .tasks-table th:nth-child(7), .tasks-table td:nth-child(7) { width: 8%; } /* 协同人或部门 */
+        .tasks-table th:nth-child(8), .tasks-table td:nth-child(8) { width: 6%; } /* 完成进度 */
+        .tasks-table th:nth-child(9), .tasks-table td:nth-child(9) { width: 5%; } /* 备注 */
+        .tasks-table th:nth-child(10), .tasks-table td:nth-child(10) { width: 5%; } /* 操作 */
+        
+        /* 删除按钮样式 */
+        .delete-row-btn {
+            background: #f44336;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.3s;
+        }
+        
+        .delete-row-btn:hover {
+            background: #d32f2f;
+        }
+        
+        .delete-row-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        
+        /* 新增按钮样式 */
+        .add-row-btn {
+            margin-top: 10px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+            display: none;
+        }
+        
+        .add-row-btn:hover {
+            background: #45a049;
+        }
+        
+        .add-row-btn.show {
+            display: inline-block;
+        }
 
         .tasks-table input:focus, .tasks-table textarea:focus {
             outline: 2px solid #1976d2;
@@ -910,6 +970,7 @@
                                         <th>协同人或部门</th>
                                         <th>完成进度</th>
                                         <th>备注</th>
+                                        <th>操作</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tasksTableBody">
@@ -924,10 +985,12 @@
                                             <td><input type="text" value="${task.协同人或部门}" ${!isEditMode ? 'readonly' : ''}></td>
                                             <td><input type="text" value="${task.完成进度}" ${!isEditMode ? 'readonly' : ''}></td>
                                             <td><input type="text" value="${task.备注}" ${!isEditMode ? 'readonly' : ''}></td>
+                                            <td><button class="delete-row-btn" onclick="deleteTaskRow(this)" ${!isEditMode ? 'disabled' : ''}>删除</button></td>
                                         </tr>
                                     `).join('')}
                                 </tbody>
                             </table>
+                            <button class="add-row-btn" id="addTaskBtn" onclick="addTaskRow()">➕ 新增任务</button>
                         </div>
                     </div>
                     
@@ -976,6 +1039,12 @@
                     input.style.backgroundColor = '#fff';
                     input.style.border = '1px solid #ddd';
                 });
+                
+                // 启用删除按钮和显示新增按钮
+                document.querySelectorAll('.delete-row-btn').forEach(btn => {
+                    btn.disabled = false;
+                });
+                document.getElementById('addTaskBtn').classList.add('show');
             };
 
             // 保存按钮
@@ -993,6 +1062,15 @@
                     input.style.backgroundColor = '#f5f5f5';
                     input.style.border = '1px solid #e0e0e0';
                 });
+                
+                // 禁用删除按钮和隐藏新增按钮
+                document.querySelectorAll('.delete-row-btn').forEach(btn => {
+                    btn.disabled = true;
+                });
+                document.getElementById('addTaskBtn').classList.remove('show');
+                
+                // 重新编号
+                updateTaskNumbers();
                 
                 showAlert('✅ 修改已保存', 'success');
             };
@@ -1021,18 +1099,78 @@
         // 保存预览修改
         function savePreviewChanges() {
             const rows = document.querySelectorAll('#tasksTableBody tr');
+            const newTasks = [];
+            
             rows.forEach((row, index) => {
                 const inputs = row.querySelectorAll('input, textarea');
-                if (currentReportData.tasks[index]) {
-                    currentReportData.tasks[index].重点需求或任务 = inputs[0].value;
-                    currentReportData.tasks[index].事项说明 = inputs[1].value;
-                    currentReportData.tasks[index].启动日期 = inputs[2].value;
-                    currentReportData.tasks[index].预计完成日期 = inputs[3].value;
-                    currentReportData.tasks[index].负责人 = inputs[4].value;
-                    currentReportData.tasks[index].协同人或部门 = inputs[5].value;
-                    currentReportData.tasks[index].完成进度 = inputs[6].value;
-                    currentReportData.tasks[index].备注 = inputs[7].value;
-                }
+                newTasks.push({
+                    序号: index + 1,
+                    重点需求或任务: inputs[0].value,
+                    事项说明: inputs[1].value,
+                    启动日期: inputs[2].value,
+                    预计完成日期: inputs[3].value,
+                    负责人: inputs[4].value,
+                    协同人或部门: inputs[5].value,
+                    完成进度: inputs[6].value,
+                    备注: inputs[7].value
+                });
+            });
+            
+            // 更新数据
+            currentReportData.tasks = newTasks;
+        }
+        
+        // 删除任务行
+        function deleteTaskRow(button) {
+            if (!isEditMode) return;
+            
+            if (confirm('确定要删除这条任务吗？')) {
+                const row = button.closest('tr');
+                row.remove();
+                updateTaskNumbers();
+                showAlert('✅ 任务已删除', 'success');
+            }
+        }
+        
+        // 新增任务行
+        function addTaskRow() {
+            if (!isEditMode) return;
+            
+            const tbody = document.getElementById('tasksTableBody');
+            const rowCount = tbody.rows.length;
+            const today = new Date().toISOString().split('T')[0];
+            
+            // 获取默认负责人
+            const defaultOwner = currentReportData.tasks[0]?.负责人 || '';
+            
+            const newRow = document.createElement('tr');
+            newRow.innerHTML = `
+                <td>${rowCount + 1}</td>
+                <td><input type="text" value="" placeholder="请输入任务名称"></td>
+                <td><textarea placeholder="请输入事项说明"></textarea></td>
+                <td><input type="text" value="${today}"></td>
+                <td><input type="text" value="${today}"></td>
+                <td><input type="text" value="${defaultOwner}"></td>
+                <td><input type="text" value="无"></td>
+                <td><input type="text" value="100%"></td>
+                <td><input type="text" value=""></td>
+                <td><button class="delete-row-btn" onclick="deleteTaskRow(this)">删除</button></td>
+            `;
+            
+            tbody.appendChild(newRow);
+            updateTaskNumbers();
+            
+            // 自动聚焦到任务名称输入框
+            newRow.querySelector('input').focus();
+            
+            showAlert('✅ 已新增任务，请填写内容', 'success');
+        }
+        
+        // 更新任务序号
+        function updateTaskNumbers() {
+            const rows = document.querySelectorAll('#tasksTableBody tr');
+            rows.forEach((row, index) => {
+                row.cells[0].textContent = index + 1;
             });
         }
 
