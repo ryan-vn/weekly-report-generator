@@ -517,6 +517,89 @@
             font-size: 13px;
             margin-top: 10px;
         }
+
+        /* 模态框样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.3s;
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 0;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            animation: slideDown 0.3s;
+        }
+
+        .modal-header {
+            padding: 20px 30px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            color: #333;
+            font-size: 20px;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 28px;
+            color: #999;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            line-height: 1;
+            transition: color 0.3s;
+        }
+
+        .modal-close:hover {
+            color: #333;
+        }
+
+        .modal-body {
+            padding: 20px 30px;
+        }
+
+        .modal-footer {
+            padding: 15px 30px;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 <body>
@@ -590,12 +673,14 @@
 
                     <div class="form-group">
                         <label for="emailSubject">📝 邮件主题</label>
-                        <input type="text" id="emailSubject" placeholder="自动生成，可自定义">
+                        <input type="text" id="emailSubject" placeholder="默认使用Excel文件名，可自定义">
+                        <small class="form-hint">例如：陈毅_10月20日-10月24日_周报</small>
                     </div>
 
                     <div class="form-group">
                         <label for="emailContent">📄 邮件内容</label>
-                        <textarea id="emailContent" rows="4" placeholder="自动生成，可自定义"></textarea>
+                        <textarea id="emailContent" rows="4" placeholder="留空直接发送附件，或填写自定义内容"></textarea>
+                        <small class="form-hint">默认只发送Excel附件，无邮件正文</small>
                     </div>
                 </div>
 
@@ -620,6 +705,7 @@
                     <button id="editBtn" class="btn btn-secondary" style="margin-right: 10px;">✏️ 编辑</button>
                     <button id="saveBtn" class="btn btn-primary" style="display: none; margin-right: 10px;">💾 保存</button>
                     <button id="resetBtn" class="btn btn-secondary" style="display: none; margin-right: 10px;">🔄 重置</button>
+                    <button id="sendEmailBtn" class="btn btn-primary" style="margin-right: 10px;">📧 发送邮件</button>
                     <button id="downloadBtn" class="btn btn-success" style="margin-right: 10px;">📥 下载Excel</button>
                     <button id="backBtn" class="btn btn-outline">← 返回</button>
                 </div>
@@ -635,6 +721,45 @@
             <h2 style="margin-bottom: 20px; color: #333;">📚 历史周报</h2>
             <div id="reportsList">
                 <div class="empty-state">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 发送邮件确认弹窗 -->
+    <div id="emailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📧 发送周报邮件</h3>
+                <button class="modal-close" onclick="closeEmailModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="modalEmailTo">📬 收件人 <span style="color: red;">*</span></label>
+                    <input type="email" id="modalEmailTo" placeholder="manager@example.com" required>
+                    <small class="form-hint">必填，多个邮箱用逗号分隔</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="modalEmailCc">📋 抄送</label>
+                    <input type="email" id="modalEmailCc" placeholder="team@example.com,hr@example.com">
+                    <small class="form-hint">可选，多个邮箱用逗号分隔</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="modalEmailSubject">📝 邮件主题</label>
+                    <input type="text" id="modalEmailSubject" placeholder="默认使用Excel文件名">
+                    <small class="form-hint">留空则自动使用文件名</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="modalEmailContent">📄 邮件内容</label>
+                    <textarea id="modalEmailContent" rows="4" placeholder="留空直接发送附件"></textarea>
+                    <small class="form-hint">可选，默认只发送附件</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeEmailModal()">取消</button>
+                <button class="btn btn-primary" onclick="confirmSendEmail()">✅ 确认发送</button>
             </div>
         </div>
     </div>
@@ -1091,6 +1216,7 @@
                 this.style.display = 'none';
                 document.getElementById('saveBtn').style.display = 'inline-block';
                 document.getElementById('resetBtn').style.display = 'inline-block';
+                document.getElementById('sendEmailBtn').style.display = 'none'; // 编辑模式下隐藏发送邮件按钮
                 
                 // 启用所有输入框
                 const inputs = document.querySelectorAll('#previewContent input, #previewContent textarea');
@@ -1114,6 +1240,7 @@
                 this.style.display = 'none';
                 document.getElementById('resetBtn').style.display = 'none';
                 document.getElementById('editBtn').style.display = 'inline-block';
+                document.getElementById('sendEmailBtn').style.display = 'inline-block'; // 退出编辑模式时显示发送邮件按钮
                 
                 // 禁用所有输入框
                 const inputs = document.querySelectorAll('#previewContent input, #previewContent textarea');

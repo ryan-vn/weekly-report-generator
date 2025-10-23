@@ -1060,25 +1060,10 @@ app.post('/api/generate-excel', async (req, res) => {
       
       if (to && to.trim()) {
         // 构建邮件内容
-        const emailSubject = subject || `${finalUserName} ${startStr}-${endStr} 工作周报`;
-        const emailContent = content || `
-          <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-            <h2 style="color: #1976d2;">📊 工作周报</h2>
-            <p>您好，</p>
-            <p>附件是 <strong>${finalUserName}</strong> 的 ${startStr}-${endStr} 工作周报，请查收。</p>
-            <p>周报包含以下内容：</p>
-            <ul>
-              <li>📝 重点任务跟进：${tasks.length} 项</li>
-              <li>📅 时间范围：${startStr} - ${endStr}</li>
-              <li>👤 负责人：${finalUserName}</li>
-            </ul>
-            <p>如有疑问，请随时联系。</p>
-            <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
-            <p style="color: #666; font-size: 12px;">
-              此邮件由周报生成器自动发送，请勿回复。
-            </p>
-          </div>
-        `;
+        // 邮件主题使用Excel文件名（去掉.xlsx后缀）
+        const emailSubject = subject || fileName.replace('.xlsx', '');
+        // 邮件内容简化：只发送附件，内容留空或使用自定义内容
+        const emailContent = content || '';
         
         emailResult = await sendEmail(to, cc, emailSubject, emailContent, outputPath, fileName);
       }
