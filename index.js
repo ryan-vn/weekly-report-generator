@@ -4,22 +4,62 @@ const { startOfWeek, endOfWeek, format } = require('date-fns');
 const OpenAI = require('openai');
 const fs = require('fs');
 
-// ==================== 配置项（请根据实际情况修改）====================
-const config = {
-  userName: '陈毅', // 周报负责人姓名
-  projectPath: '/path/to/your/project', // Git项目本地路径（绝对路径）
-  templatePath: './周报模版.xlsx', // 模板文件路径
-  outputPath: `./陈毅_${format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'MM月dd日')}-${format(new Date(startOfWeek(new Date(), { weekStartsOn: 1 }).getTime() + 4 * 24 * 60 * 60 * 1000), 'MM月dd日')}_周报.xlsx`, // 输出文件路径
-  deepseekApiKey: process.env.DEEPSEEK_API_KEY, // DeepSeek API密钥（从环境变量获取）
-  deepseekModel: 'deepseek-chat', // 推荐使用deepseek-coder（代码解析更优）
-  weekStartsOnMonday: true, // 周一为一周第一天
-  // 模板中表格起始行（需根据你的模板调整！）
-  templateRows: {
-    titleRow: 1, // 标题所在行（如："XXX 2025年XX月XX-XX月XX日工作周报"）
-    taskStartRow: 4, // 重点任务表格起始行（含表头的下一行）
-    problemStartRow: 12 // 日常问题表格起始行（含表头的下一行）
+// ==================== 读取配置文件 =====================
+function loadConfig() {
+  try {
+    if (fs.existsSync('./config.json')) {
+      const data = fs.readFileSync('./config.json', 'utf8');
+      const configData = JSON.parse(data);
+      
+      // 从config.json读取配置
+      const userName = configData.userName || '用户';
+      const projectPaths = configData.projectPaths || [];
+      
+      // 生成输出文件名
+      const start = startOfWeek(new Date(), { weekStartsOn: 1 });
+      const end = new Date(start);
+      end.setDate(start.getDate() + 4);
+      const startStr = format(start, 'MM月dd日');
+      const endStr = format(end, 'MM月dd日');
+      
+      return {
+        userName,
+        projectPaths,
+        templatePath: './周报模版.xlsx',
+        outputPath: `./${userName}_${startStr}-${endStr}_周报.xlsx`,
+        deepseekApiKey: process.env.DEEPSEEK_API_KEY,
+        deepseekModel: 'deepseek-chat',
+        weekStartsOnMonday: true,
+        templateRows: {
+          titleRow: 1,
+          taskStartRow: 4,
+          problemStartRow: 12
+        }
+      };
+    }
+  } catch (err) {
+    console.error('❌ 读取配置文件失败:', err.message);
   }
-};
+  
+  // 如果配置文件不存在或读取失败，使用默认配置
+  console.log('⚠️  未找到config.json，使用默认配置');
+  return {
+    userName: '用户',
+    projectPaths: [],
+    templatePath: './周报模版.xlsx',
+    outputPath: './周报.xlsx',
+    deepseekApiKey: process.env.DEEPSEEK_API_KEY,
+    deepseekModel: 'deepseek-chat',
+    weekStartsOnMonday: true,
+    templateRows: {
+      titleRow: 1,
+      taskStartRow: 4,
+      problemStartRow: 12
+    }
+  };
+}
+
+const config = loadConfig();
 
 // ==================== 工具函数：日期处理 ====================
 /**
@@ -49,17 +89,17 @@ function getThisWeekRange() {
  * 从Git仓库获取本周提交记录
  * @returns {Array} 结构化的提交记录数组
  */
-function getGitCommits() {
+function getGitCommits(projectPath) {
   const { start, end, startStr, endStr } = getThisWeekRange();
   const since = format(start, 'yyyy-MM-dd');
   const until = format(end, 'yyyy-MM-dd');
 
-  console.log(`\n📅 查询时间范围: ${since} ~ ${until} (${startStr} ~ ${endStr})`);
-  console.log(`📁 扫描项目: ${config.projectPath}\n`);
+  console.log(`📅 查询时间范围: ${since} ~ ${until} (${startStr} ~ ${endStr})`);
+  console.log(`📁 扫描项目: ${projectPath}`);
 
   try {
     // 执行Git命令：获取指定时间范围内的提交（含文件修改记录）
-    const cmd = `git -C "${config.projectPath}" log \
+    const cmd = `git -C "${projectPath}" log \
       --since="${since}" --until="${until} 23:59:59" \
       --pretty=format:"COMMIT_SEP|%H|%an|%ad|%s" --date=short \
       --name-status`;
@@ -87,7 +127,8 @@ function getGitCommits() {
           author,
           date,
           message: message.trim(),
-          files: [] // 存储修改的文件列表
+          files: [], // 存储修改的文件列表
+          project: require('path').basename(projectPath)
         };
       } else if (currentCommit) {
         // 处理文件修改记录（A=新增，M=修改，D=删除）
@@ -177,14 +218,14 @@ async function processCommits(commits) {
   const problems = []; // 日常工作遇到的问题（保持空白）
 
   for (const [index, commit] of commits.entries()) {
-    console.log(`🔍 解析第 ${index + 1}/${commits.length} 条提交...`);
+    console.log(`🔍 解析第 ${index + 1}/${commits.length} 条提交... (${commit.project})`);
     const parsed = await parseCommitWithDeepSeek(commit.message);
 
     // 所有AI生成的内容都放到重点任务表格中
     tasks.push({
       序号: tasks.length + 1,
       重点需求或任务: parsed.分类,
-      事项说明: parsed.描述,
+      事项说明: `[${commit.project}] ${parsed.描述}`,
       启动日期: commit.date,
       预计完成日期: commit.date,
       负责人: config.userName,
@@ -286,8 +327,20 @@ async function main() {
       process.exit(1);
     }
 
-    // 2. 获取Git提交记录
-    const commits = getGitCommits();
+    // 2. 显示配置信息
+    console.log(`👤 周报负责人: ${config.userName}`);
+    console.log(`📦 项目数量: ${config.projectPaths.length}`);
+    console.log(`📁 项目路径: ${config.projectPaths.join(', ')}`);
+    console.log(`📄 输出文件: ${config.outputPath}\n`);
+
+    // 3. 获取Git提交记录（支持多项目）
+    const commits = [];
+    for (const projectPath of config.projectPaths) {
+      console.log(`🔍 正在扫描项目: ${projectPath}`);
+      const projectCommits = getGitCommits(projectPath);
+      commits.push(...projectCommits);
+    }
+    
     if (commits.length === 0) {
       console.log('ℹ️ 本周（周一至周五）无提交记录，无需生成周报\n');
       return;
