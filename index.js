@@ -9,7 +9,7 @@ const config = {
   userName: '陈毅', // 周报负责人姓名
   projectPath: '/path/to/your/project', // Git项目本地路径（绝对路径）
   templatePath: './周报模版.xlsx', // 模板文件路径
-  outputPath: `./${format(new Date(), 'yyyyMMdd')}_工作周报.xlsx`, // 输出文件路径
+  outputPath: `./陈毅_${format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'MM月dd日')}-${format(new Date(startOfWeek(new Date(), { weekStartsOn: 1 }).getTime() + 4 * 24 * 60 * 60 * 1000), 'MM月dd日')}_周报.xlsx`, // 输出文件路径
   deepseekApiKey: process.env.DEEPSEEK_API_KEY, // DeepSeek API密钥（从环境变量获取）
   deepseekModel: 'deepseek-chat', // 推荐使用deepseek-coder（代码解析更优）
   weekStartsOnMonday: true, // 周一为一周第一天
@@ -174,36 +174,24 @@ async function parseCommitWithDeepSeek(commitMessage) {
  */
 async function processCommits(commits) {
   const tasks = []; // 重点任务跟进项
-  const problems = []; // 日常工作遇到的问题
+  const problems = []; // 日常工作遇到的问题（保持空白）
 
   for (const [index, commit] of commits.entries()) {
     console.log(`🔍 解析第 ${index + 1}/${commits.length} 条提交...`);
     const parsed = await parseCommitWithDeepSeek(commit.message);
 
-    if (parsed.类型 === '任务') {
-      // 重点任务：适配模板中的字段
-      tasks.push({
-        序号: tasks.length + 1,
-        重点需求或任务: parsed.分类,
-        事项说明: parsed.描述,
-        启动日期: commit.date,
-        预计完成日期: commit.date, // 假设提交即完成，可根据实际调整
-        负责人: config.userName,
-        协同人或部门: '无', // 可根据团队规则扩展
-        完成进度: '100%',
-        备注: `关联ID: ${parsed.关联ID}`
-      });
-    } else {
-      // 日常问题：适配模板中的字段
-      problems.push({
-        序号: problems.length + 1,
-        问题分类: parsed.分类,
-        具体描述: parsed.描述,
-        提出日期: commit.date,
-        解决方案: '已修复/处理', // 可根据实际调整
-        解决日期: commit.date
-      });
-    }
+    // 所有AI生成的内容都放到重点任务表格中
+    tasks.push({
+      序号: tasks.length + 1,
+      重点需求或任务: parsed.分类,
+      事项说明: parsed.描述,
+      启动日期: commit.date,
+      预计完成日期: commit.date,
+      负责人: config.userName,
+      协同人或部门: '无',
+      完成进度: '100%',
+      备注: ``
+    });
   }
 
   return { tasks, problems };
@@ -228,7 +216,8 @@ async function generateExcel(tasks, problems) {
 
   // 1. 更新周报标题
   const { year, month, startStr, endStr } = getThisWeekRange();
-  const title = `${config.userName} ${year}年${month}月${startStr}-${endStr}工作周报`;
+  console.log("++++++++++++++++++++", year, month, startStr, endStr)
+  const title = `${config.userName} ${year}年${startStr}-${endStr}工作周报`;
   worksheet.getCell(`A${config.templateRows.titleRow}`).value = title;
   console.log(`📝 周报标题：${title}`);
 
@@ -245,6 +234,23 @@ async function generateExcel(tasks, problems) {
     row.getCell(7).value = task.协同人或部门; // G列：协同人/部门
     row.getCell(8).value = task.完成进度; // H列：完成进度
     row.getCell(9).value = task.备注; // I列：备注
+    
+    // 设置单元格样式，特别优化"事项说明"列的换行显示
+    for (let j = 1; j <= 9; j++) {
+      const cell = row.getCell(j);
+      if (j === 3) { // 事项说明列
+        cell.alignment = { 
+          horizontal: 'left', 
+          vertical: 'top', 
+          wrapText: true,
+          indent: 1
+        };
+        // 设置行高以适应换行内容
+        row.height = Math.max(60, (task.事项说明.length / 50) * 20);
+      } else {
+        cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+      }
+    }
   });
   console.log(`✅ 已填充 ${tasks.length} 条重点任务`);
 

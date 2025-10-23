@@ -224,34 +224,24 @@ async function parseCommitWithDeepSeek(commitMessage, projectName) {
  */
 async function processCommits(commits, userName) {
   const tasks = [];
-  const problems = [];
+  const problems = []; // 保持空白，不填充任何内容
 
   for (const [index, commit] of commits.entries()) {
     console.log(`🔍 解析第 ${index + 1}/${commits.length} 条提交... (${commit.project})`);
     const parsed = await parseCommitWithDeepSeek(commit.message, commit.project);
 
-    if (parsed.类型 === '任务') {
-      tasks.push({
-        序号: tasks.length + 1,
-        重点需求或任务: parsed.分类,
-        事项说明: `[${commit.project}] ${parsed.描述}`,
-        启动日期: commit.date,
-        预计完成日期: commit.date,
-        负责人: userName,
-        协同人或部门: '无',
-        完成进度: '100%',
-        备注: `关联ID: ${parsed.关联ID}`
-      });
-    } else {
-      problems.push({
-        序号: problems.length + 1,
-        问题分类: parsed.分类,
-        具体描述: `[${commit.project}] ${parsed.描述}`,
-        提出日期: commit.date,
-        解决方案: '已修复/处理',
-        解决日期: commit.date
-      });
-    }
+    // 所有AI生成的内容都放到重点任务表格中
+    tasks.push({
+      序号: tasks.length + 1,
+      重点需求或任务: parsed.分类,
+      事项说明: `[${commit.project}] ${parsed.描述}`,
+      启动日期: commit.date,
+      预计完成日期: commit.date,
+      负责人: userName,
+      协同人或部门: '无',
+      完成进度: '100%',
+      备注: `类型: ${parsed.类型} | 关联ID: ${parsed.关联ID}`
+    });
   }
 
   return { tasks, problems };
@@ -309,7 +299,20 @@ async function generateExcel(userName, tasks, problems, startDate, endDate, outp
         bottom: { style: 'thin', color: { argb: 'FF000000' } },
         right: { style: 'thin', color: { argb: 'FF000000' } }
       };
-      cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+      
+      // 特别优化"事项说明"列（第3列）的换行显示
+      if (j === 3) {
+        cell.alignment = { 
+          horizontal: 'left', 
+          vertical: 'top', 
+          wrapText: true,
+          indent: 1
+        };
+        // 设置行高以适应换行内容
+        row.height = Math.max(60, (task.事项说明.length / 50) * 20);
+      } else {
+        cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+      }
     }
 
     row.commit(); // 提交行修改
@@ -524,8 +527,8 @@ app.post('/api/generate', async (req, res) => {
     const { tasks, problems } = await processCommits(commits, userName);
 
     // 3. 生成Excel周报
-    const timestamp = format(new Date(), 'yyyyMMdd_HHmmss');
-    const fileName = `${timestamp}_${userName}_工作周报.xlsx`;
+    const { startStr, endStr } = getWeekRange(startDate, endDate);
+    const fileName = `${userName}_${startStr}-${endStr}_周报.xlsx`;
     const outputPath = path.join(__dirname, 'output', fileName);
     
     // 确保输出目录存在
