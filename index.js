@@ -62,7 +62,7 @@ function getGitCommits() {
     const cmd = `git -C "${config.projectPath}" log \
       --since="${since}" --until="${until} 23:59:59" \
       --pretty=format:"COMMIT_SEP|%H|%an|%ad|%s" --date=short \
-      --name-status`;
+      --name-status --stat`;
 
     const output = execSync(cmd, { encoding: 'utf-8' });
     
@@ -87,11 +87,22 @@ function getGitCommits() {
           author,
           date,
           message: message.trim(),
-          files: [] // 存储修改的文件列表
+          files: [], // 存储修改的文件列表
+          stats: '' // 代码改动统计
         };
       } else if (currentCommit) {
-        // 处理文件修改记录（A=新增，M=修改，D=删除）
-        currentCommit.files.push(line.trim());
+        // 检查是否是统计信息行
+        if (line.includes('files changed') || line.includes('insertions') || line.includes('deletions')) {
+          currentCommit.stats = line.trim();
+        } else if (line.includes('|') && (line.includes('+') || line.includes('-')) && line.includes('file')) {
+          currentCommit.stats = line.trim();
+        } else if (line.includes('|') && (line.includes('+') || line.includes('-')) && !line.includes('file')) {
+          // 这是文件变更行
+          currentCommit.files.push(line.trim());
+        } else if (!line.includes('|') && line.trim() !== '') {
+          // 其他文件变更行
+          currentCommit.files.push(line.trim());
+        }
       }
     }
     // 添加最后一个提交
@@ -108,6 +119,9 @@ function getGitCommits() {
       console.log(`   提交信息: ${commit.message}`);
       if (commit.files.length > 0) {
         console.log(`   修改文件: ${commit.files.slice(0, 3).join(', ')}${commit.files.length > 3 ? '...' : ''}`);
+      }
+      if (commit.stats) {
+        console.log(`   代码改动: ${commit.stats}`);
       }
       console.log('');
     });
@@ -180,11 +194,21 @@ async function processCommits(commits) {
     console.log(`🔍 解析第 ${index + 1}/${commits.length} 条提交...`);
     const parsed = await parseCommitWithDeepSeek(commit.message);
 
+    // 构建包含代码改动信息的事项说明
+    let description = parsed.描述;
+    if (commit.stats) {
+      description += `\n代码改动: ${commit.stats}`;
+    }
+    if (commit.files.length > 0) {
+      const fileList = commit.files.slice(0, 5).join(', ');
+      description += `\n涉及文件: ${fileList}${commit.files.length > 5 ? '...' : ''}`;
+    }
+
     // 所有AI生成的内容都放到重点任务表格中
     tasks.push({
       序号: tasks.length + 1,
       重点需求或任务: parsed.分类,
-      事项说明: parsed.描述,
+      事项说明: description,
       启动日期: commit.date,
       预计完成日期: commit.date,
       负责人: config.userName,
