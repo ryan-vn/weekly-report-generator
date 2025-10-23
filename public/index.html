@@ -331,7 +331,7 @@
                     <label for="userName">👤 周报负责人姓名</label>
                     <div style="display: flex; gap: 10px; align-items: center;">
                         <input type="text" id="userName" placeholder="请输入姓名" required style="flex: 1;">
-                        <button type="button" class="btn btn-secondary" onclick="clearCache()" style="padding: 8px 12px; font-size: 12px;">🗑️ 清除缓存</button>
+                        <button type="button" class="btn btn-secondary" onclick="clearConfig()" style="padding: 8px 12px; font-size: 12px;">🗑️ 清除配置</button>
                     </div>
                 </div>
 
@@ -389,47 +389,67 @@
     <script>
         let projectPaths = [];
 
-        // 页面加载时恢复缓存的数据
+        // 页面加载时恢复配置数据
         document.addEventListener('DOMContentLoaded', function() {
-            loadCachedData();
+            loadConfigData();
         });
 
-        // 加载缓存数据
-        function loadCachedData() {
-            const cachedUserName = localStorage.getItem('weeklyReport_userName');
-            const cachedProjectPaths = localStorage.getItem('weeklyReport_projectPaths');
-            
-            console.log('加载缓存数据...');
-            console.log('缓存的用户名:', cachedUserName);
-            console.log('缓存的项目路径:', cachedProjectPaths);
-            
-            if (cachedUserName) {
-                document.getElementById('userName').value = cachedUserName;
-            }
-            
-            if (cachedProjectPaths) {
-                try {
-                    const parsedPaths = JSON.parse(cachedProjectPaths);
-                    projectPaths = parsedPaths || [];
-                    console.log('恢复的项目路径:', projectPaths);
-                    renderProjects();
-                } catch (e) {
-                    console.error('解析缓存的项目路径失败:', e);
-                    projectPaths = [];
+        // 加载配置数据
+        async function loadConfigData() {
+            try {
+                const response = await fetch('/api/config');
+                const result = await response.json();
+                
+                if (result.success) {
+                    const config = result.config;
+                    console.log('加载配置数据...', config);
+                    
+                    // 恢复用户名
+                    if (config.userName) {
+                        document.getElementById('userName').value = config.userName;
+                    }
+                    
+                    // 恢复项目路径
+                    if (config.projectPaths && config.projectPaths.length > 0) {
+                        projectPaths = config.projectPaths;
+                        console.log('恢复的项目路径:', projectPaths);
+                        renderProjects();
+                    }
                 }
-            } else {
-                projectPaths = [];
+            } catch (err) {
+                console.error('加载配置失败:', err);
             }
         }
 
-        // 保存数据到缓存
-        function saveCachedData() {
-            const userName = document.getElementById('userName').value.trim();
-            if (userName) {
-                localStorage.setItem('weeklyReport_userName', userName);
+        // 保存数据到配置文件
+        async function saveConfigData() {
+            try {
+                const userName = document.getElementById('userName').value.trim();
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userName: userName,
+                        projectPaths: projectPaths,
+                        settings: {
+                            autoSave: true,
+                            defaultDateRange: "currentWeek",
+                            maxProjects: 10
+                        }
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    console.log('配置保存成功');
+                } else {
+                    console.error('配置保存失败:', result.error);
+                }
+            } catch (err) {
+                console.error('保存配置失败:', err);
             }
-            localStorage.setItem('weeklyReport_projectPaths', JSON.stringify(projectPaths));
-            console.log('保存到缓存:', { userName, projectPaths });
         }
 
         // 浏览文件夹
@@ -473,7 +493,7 @@
             input.value = '';
             console.log('添加后的项目列表:', projectPaths);
             renderProjects();
-            saveCachedData(); // 保存到缓存
+            saveConfigData(); // 保存到配置文件
             showAlert(`✅ 已添加项目: ${path.split('/').pop()}`, 'success');
         }
 
@@ -481,7 +501,7 @@
         function removeProject(index) {
             projectPaths.splice(index, 1);
             renderProjects();
-            saveCachedData(); // 保存到缓存
+            saveConfigData(); // 保存到配置文件
         }
 
         // 渲染项目列表
@@ -491,6 +511,7 @@
             const projectCount = document.getElementById('projectCount');
 
             console.log('渲染项目列表，当前项目数:', projectPaths.length);
+            console.log('项目路径数组:', projectPaths);
 
             // 更新项目计数
             if (projectCount) {
@@ -504,8 +525,12 @@
             }
 
             emptyState.style.display = 'none';
-            container.innerHTML = '';
-
+            
+            // 清空现有内容
+            const existingItems = container.querySelectorAll('.project-item');
+            existingItems.forEach(item => item.remove());
+            
+            // 添加新项目
             projectPaths.forEach((path, index) => {
                 const item = document.createElement('div');
                 item.className = 'project-item';
@@ -515,6 +540,7 @@
                     <button type="button" onclick="removeProject(${index})">删除</button>
                 `;
                 container.appendChild(item);
+                console.log(`添加项目到界面: ${projectName} (${path})`);
             });
         }
 
@@ -549,8 +575,8 @@
                 return;
             }
 
-            // 保存当前数据到缓存
-            saveCachedData();
+            // 保存当前数据到配置文件
+            saveConfigData();
 
             // 显示加载状态
             document.getElementById('loading').classList.add('show');
@@ -640,21 +666,43 @@
 
         // 姓名输入时自动保存
         document.getElementById('userName').addEventListener('input', function() {
-            saveCachedData();
+            saveConfigData();
         });
 
-        // 清除缓存
-        function clearCache() {
-            if (confirm('确定要清除所有缓存数据吗？这将删除已保存的姓名和项目路径。')) {
-                localStorage.removeItem('weeklyReport_userName');
-                localStorage.removeItem('weeklyReport_projectPaths');
-                
-                // 清空界面
-                document.getElementById('userName').value = '';
-                projectPaths = [];
-                renderProjects();
-                
-                showAlert('✅ 缓存已清除', 'success');
+        // 清除配置
+        async function clearConfig() {
+            if (confirm('确定要清除所有配置数据吗？这将删除已保存的姓名和项目路径。')) {
+                try {
+                    const response = await fetch('/api/config', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            userName: "",
+                            projectPaths: [],
+                            settings: {
+                                autoSave: true,
+                                defaultDateRange: "currentWeek",
+                                maxProjects: 10
+                            }
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    if (result.success) {
+                        // 清空界面
+                        document.getElementById('userName').value = '';
+                        projectPaths = [];
+                        renderProjects();
+                        
+                        showAlert('✅ 配置已清除', 'success');
+                    } else {
+                        showAlert('❌ 清除配置失败: ' + result.error, 'error');
+                    }
+                } catch (err) {
+                    showAlert('❌ 清除配置失败: ' + err.message, 'error');
+                }
             }
         }
 

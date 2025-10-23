@@ -19,6 +19,43 @@ const openai = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY
 });
 
+// 配置文件路径
+const CONFIG_FILE = './config.json';
+
+// 读取配置文件
+function loadConfig() {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      const data = fs.readFileSync(CONFIG_FILE, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (err) {
+    console.error('❌ 读取配置文件失败:', err.message);
+  }
+  return {
+    userName: "",
+    projectPaths: [],
+    lastUsed: null,
+    settings: {
+      autoSave: true,
+      defaultDateRange: "currentWeek",
+      maxProjects: 10
+    }
+  };
+}
+
+// 保存配置文件
+function saveConfig(config) {
+  try {
+    config.lastUsed = new Date().toISOString();
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+    return true;
+  } catch (err) {
+    console.error('❌ 保存配置文件失败:', err.message);
+    return false;
+  }
+}
+
 // ==================== 工具函数 ====================
 
 /**
@@ -224,7 +261,7 @@ async function processCommits(commits, userName) {
  * 生成Excel周报
  */
 async function generateExcel(userName, tasks, problems, startDate, endDate, outputPath) {
-  const templatePath = './周报模版_带颜色.xlsx';
+  const templatePath = './周报模版.xlsx';
   
   if (!fs.existsSync(templatePath)) {
     throw new Error(`❌ 模板文件不存在：${templatePath}`);
@@ -239,13 +276,15 @@ async function generateExcel(userName, tasks, problems, startDate, endDate, outp
   const title = `${userName} ${year}年${month}月${startStr}-${endStr}工作周报`;
   worksheet.getCell('C1').value = title;
 
-  // 填充重点任务表格
+  // 填充重点任务表格 (A4:I7)
   const taskStartRow = 4;
   tasks.forEach((task, index) => {
     const rowNum = taskStartRow + index;
-    const row = worksheet.getRow(rowNum);
+    if (rowNum > 7) return; // 限制在4行内
     
-    // 设置数据并保持白色背景
+    const row = worksheet.getRow(rowNum);
+
+    // 设置数据并支持换行
     row.getCell(1).value = task.序号;
     row.getCell(2).value = task.重点需求或任务;
     row.getCell(3).value = task.事项说明;
@@ -255,64 +294,110 @@ async function generateExcel(userName, tasks, problems, startDate, endDate, outp
     row.getCell(7).value = task.协同人或部门;
     row.getCell(8).value = task.完成进度;
     row.getCell(9).value = task.备注;
-    
-    // 保持白色背景和灰色边框
+
+    // 保持白色背景和边框，支持换行
     for (let j = 1; j <= 9; j++) {
-      row.getCell(j).fill = {
+      const cell = row.getCell(j);
+      cell.fill = {
         type: 'pattern',
         pattern: 'solid',
         fgColor: { argb: 'FFFFFFFF' } // 白色背景
       };
-      row.getCell(j).border = {
-        top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
-        left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
-        bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
-        right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF000000' } },
+        left: { style: 'thin', color: { argb: 'FF000000' } },
+        bottom: { style: 'thin', color: { argb: 'FF000000' } },
+        right: { style: 'thin', color: { argb: 'FF000000' } }
       };
+      cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
     }
-    
+
     row.commit(); // 提交行修改
   });
-  console.log(`✅ 已填充 ${tasks.length} 条重点任务`);
+  console.log(`✅ 已填充 ${Math.min(tasks.length, 4)} 条重点任务`);
 
   // 填充日常问题表格
   const problemStartRow = 15;
   problems.forEach((problem, index) => {
     const rowNum = problemStartRow + index;
+    if (rowNum > 19) return; // 限制在5行内
+    
     const row = worksheet.getRow(rowNum);
     
-    // 设置数据并保持白色背景
+    // 设置数据并支持换行
     row.getCell(1).value = problem.序号;
     row.getCell(2).value = problem.问题分类;
     row.getCell(3).value = problem.具体描述;
     row.getCell(4).value = problem.提出日期;
     row.getCell(5).value = problem.解决方案;
     row.getCell(6).value = problem.解决日期;
-    
-    // 保持白色背景和灰色边框
+
+    // 保持白色背景和边框，支持换行
     for (let j = 1; j <= 6; j++) {
-      row.getCell(j).fill = {
+      const cell = row.getCell(j);
+      cell.fill = {
         type: 'pattern',
         pattern: 'solid',
         fgColor: { argb: 'FFFFFFFF' } // 白色背景
       };
-      row.getCell(j).border = {
-        top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
-        left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
-        bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
-        right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF000000' } },
+        left: { style: 'thin', color: { argb: 'FF000000' } },
+        bottom: { style: 'thin', color: { argb: 'FF000000' } },
+        right: { style: 'thin', color: { argb: 'FF000000' } }
       };
+      cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
     }
     
     row.commit(); // 提交行修改
   });
-  console.log(`✅ 已填充 ${problems.length} 条日常问题`);
+  console.log(`✅ 已填充 ${Math.min(problems.length, 5)} 条日常问题`);
 
   await workbook.xlsx.writeFile(outputPath);
   console.log(`🎉 周报生成成功！路径：${outputPath}`);
 }
 
 // ==================== API路由 ====================
+
+/**
+ * 获取配置API
+ */
+app.get('/api/config', (req, res) => {
+  try {
+    const config = loadConfig();
+    res.json({ success: true, config });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * 保存配置API
+ */
+app.post('/api/config', (req, res) => {
+  try {
+    const { userName, projectPaths, settings } = req.body;
+    const config = {
+      userName: userName || "",
+      projectPaths: projectPaths || [],
+      lastUsed: new Date().toISOString(),
+      settings: {
+        autoSave: true,
+        defaultDateRange: "currentWeek",
+        maxProjects: 10,
+        ...settings
+      }
+    };
+    
+    if (saveConfig(config)) {
+      res.json({ success: true, message: '配置保存成功' });
+    } else {
+      res.status(500).json({ success: false, error: '配置保存失败' });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 /**
  * 浏览目录API - 打开系统文件选择器
@@ -456,6 +541,7 @@ app.post('/api/generate', async (req, res) => {
       fileName,
       tasks: tasks.length,
       problems: problems.length,
+      projectCount: projectPaths.length,
       downloadUrl: `/download/${fileName}`
     });
 
