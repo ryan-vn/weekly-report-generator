@@ -292,6 +292,7 @@ ${commitSummary}
 2. **功能聚合**: 将同一模块或功能的多次提交合并为一个任务
 3. **工作描述**: 用专业、简洁的语言描述工作内容，避免过于技术化的细节且 让领导看到做了很多任务 而且同事看了任务很难实现
 4. **关键改动**: 总结该任务的主要改动点（2-4个要点）
+5. **提交编号**: 记录该任务涉及的提交编号（用于确定实际开始和结束时间）
 
 输出格式（必须是有效的 JSON 数组）:
 [
@@ -300,7 +301,7 @@ ${commitSummary}
     "分类": "开发新功能|修复bug|优化性能|代码重构|文档更新",
     "描述": "简洁专业的工作描述（15-40字）",
     "关键改动": ["改动点1", "改动点2", "改动点3"],
-    "涉及提交数": 提交数量
+    "涉及提交编号": [1, 2, 3]
   }
 ]
 
@@ -309,6 +310,7 @@ ${commitSummary}
 - 如果提交之间完全无关，可以分成多条
 - 描述要站在周报汇报的角度，突出工作价值
 - 避免使用"修复了一个bug"这样的模糊描述，要具体说明修复了什么问题
+- **重要**: 必须包含"涉及提交编号"字段，记录该任务对应的提交编号（从1开始）
 
 请直接输出 JSON 数组，不要有其他内容。`;
 
@@ -340,7 +342,10 @@ ${commitSummary}
     
     // 显示识别的模块
     parsedTasks.forEach((task, index) => {
-      console.log(`   ${index + 1}. [${task.模块}] ${task.描述} (合并${task.涉及提交数}个提交)`);
+      const commitInfo = task.涉及提交编号 && task.涉及提交编号.length > 0
+        ? `提交#${task.涉及提交编号.join(', #')}`
+        : `${task.涉及提交数 || 0}个提交`;
+      console.log(`   ${index + 1}. [${task.模块}] ${task.描述} (${commitInfo})`);
     });
     
     return parsedTasks;
@@ -354,7 +359,8 @@ ${commitSummary}
       分类: '开发任务',
       描述: `${projectName} 项目开发工作（${commits.length}个提交）`,
       关键改动: commits.slice(0, 3).map(c => c.message),
-      涉及提交数: commits.length
+      涉及提交数: commits.length,
+      涉及提交编号: Array.from({ length: commits.length }, (_, i) => i + 1) // 所有提交编号
     }];
   }
 }
@@ -437,10 +443,36 @@ async function processCommits(commits, userName) {
     
     // 将分析结果转换为周报格式
     for (const task of projectTasks) {
-      // 计算日期范围
-      const dates = projectCommits.map(c => c.date).sort();
-      const startDate = dates[0];
-      const endDate = dates[dates.length - 1];
+      // 根据涉及的提交编号计算实际的日期范围
+      let startDate, endDate;
+      
+      if (task.涉及提交编号 && Array.isArray(task.涉及提交编号) && task.涉及提交编号.length > 0) {
+        // 获取该任务涉及的所有commits
+        const taskCommits = task.涉及提交编号
+          .map(index => projectCommits[index - 1]) // 编号从1开始，数组从0开始
+          .filter(commit => commit !== undefined);
+        
+        if (taskCommits.length > 0) {
+          // 从这些commits中提取日期并排序
+          const taskDates = taskCommits.map(c => c.date).sort();
+          startDate = taskDates[0];
+          endDate = taskDates[taskDates.length - 1];
+          
+          console.log(`   📅 任务[${task.模块}] 时间范围: ${startDate} ~ ${endDate} (基于${taskCommits.length}个提交)`);
+        } else {
+          // 如果提交编号无效，使用整个项目的日期范围
+          const dates = projectCommits.map(c => c.date).sort();
+          startDate = dates[0];
+          endDate = dates[dates.length - 1];
+          console.log(`   ⚠️  任务[${task.模块}] 提交编号无效，使用项目整体时间范围`);
+        }
+      } else {
+        // 如果没有提交编号信息，使用整个项目的日期范围
+        const dates = projectCommits.map(c => c.date).sort();
+        startDate = dates[0];
+        endDate = dates[dates.length - 1];
+        console.log(`   ⚠️  任务[${task.模块}] 缺少提交编号，使用项目整体时间范围`);
+      }
       
       // 构建详细的事项说明
       const taskDescription = task.关键改动 && task.关键改动.length > 0
@@ -474,6 +506,44 @@ async function processCommits(commits, userName) {
 }
 
 /**
+ * 智能计算单元格行高
+ * @param {string} text - 单元格文本内容
+ * @param {number} columnWidth - 列宽（字符数）
+ * @param {number} fontSize - 字体大小
+ * @returns {number} 建议的行高
+ */
+function calculateRowHeight(text, columnWidth = 40, fontSize = 11) {
+  if (!text) return 20; // 默认行高
+  
+  const textStr = String(text);
+  const lines = textStr.split('\n'); // 按换行符分割
+  let totalLines = 0;
+  
+  for (const line of lines) {
+    if (line.trim() === '') {
+      totalLines += 1; // 空行也算一行
+    } else {
+      // 计算该行在指定列宽下会占用多少行
+      // 中文字符按2个字符计算，英文和数字按1个字符计算
+      const chineseChars = (line.match(/[\u4e00-\u9fa5]/g) || []).length;
+      const otherChars = line.length - chineseChars;
+      const effectiveLength = chineseChars * 2 + otherChars;
+      
+      const wrappedLines = Math.ceil(effectiveLength / columnWidth);
+      totalLines += Math.max(1, wrappedLines);
+    }
+  }
+  
+  // 根据行数计算高度：基础高度 + (行数 × 行高系数)
+  const baseHeight = 20;
+  const lineHeightFactor = fontSize * 1.5; // 行高系数
+  const calculatedHeight = baseHeight + (totalLines * lineHeightFactor);
+  
+  // 限制最小和最大高度
+  return Math.max(30, Math.min(calculatedHeight, 300));
+}
+
+/**
  * 生成Excel周报
  */
 async function generateExcel(userName, tasks, problems, startDate, endDate, outputPath) {
@@ -491,6 +561,9 @@ async function generateExcel(userName, tasks, problems, startDate, endDate, outp
   const { year, startStr, endStr } = getWeekRange(startDate, endDate);
   const title = `${userName} ${year}年${startStr}-${endStr}工作周报`;
   worksheet.getCell('C1').value = title;
+
+  // 设置"事项说明"列（C列）的宽度
+  worksheet.getColumn(3).width = 60; // 设置为60个字符宽度，可根据需要调整
 
   // 填充重点任务表格 (从A4开始，动态扩展)
   const taskStartRow = 4;
@@ -527,7 +600,15 @@ async function generateExcel(userName, tasks, problems, startDate, endDate, outp
           bottom: { style: 'thin', color: { argb: 'FF000000' } },
           right: { style: 'thin', color: { argb: 'FF000000' } }
         };
-        targetCell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+        
+        // 设置对齐方式（与主循环保持一致）
+        if (j === 3) {
+          targetCell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true, indent: 1 };
+        } else if (j === 1 || (j >= 4 && j <= 8)) {
+          targetCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        } else {
+          targetCell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+        }
       }
     }
     
@@ -561,20 +642,31 @@ async function generateExcel(userName, tasks, problems, startDate, endDate, outp
         right: { style: 'thin', color: { argb: 'FF000000' } }
       };
       
-      // 特别优化"事项说明"列（第3列）的换行显示
+      // 设置不同列的对齐方式
       if (j === 3) {
+        // 事项说明列：左对齐，顶部对齐
         cell.alignment = { 
           horizontal: 'left', 
           vertical: 'top', 
           wrapText: true,
           indent: 1
         };
-        // 设置行高以适应换行内容
-        row.height = Math.max(60, (task.事项说明.length / 50) * 20);
+      } else if (j === 1 || (j >= 4 && j <= 8)) {
+        // 序号、启动日期、预计完成日期、负责人、协同人/部门、完成进度：居中对齐
+        cell.alignment = { 
+          horizontal: 'center', 
+          vertical: 'middle', 
+          wrapText: true 
+        };
       } else {
+        // 其他列（重点需求/任务、备注）：左对齐，顶部对齐
         cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
       }
     }
+    
+    // 根据事项说明内容智能设置行高
+    const calculatedHeight = calculateRowHeight(task.事项说明, 55, 11);
+    row.height = calculatedHeight;
 
     row.commit(); // 提交行修改
   });
@@ -618,7 +710,15 @@ async function generateExcel(userName, tasks, problems, startDate, endDate, outp
           bottom: { style: 'thin', color: { argb: 'FF000000' } },
           right: { style: 'thin', color: { argb: 'FF000000' } }
         };
-        targetCell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+        
+        // 设置对齐方式（与主循环保持一致）
+        if (j === 3 || j === 5) {
+          targetCell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true, indent: 1 };
+        } else if (j === 1 || j === 2 || j === 4 || j === 6) {
+          targetCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        } else {
+          targetCell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+        }
       }
     }
     
@@ -646,8 +746,33 @@ async function generateExcel(userName, tasks, problems, startDate, endDate, outp
         bottom: { style: 'thin', color: { argb: 'FF000000' } },
         right: { style: 'thin', color: { argb: 'FF000000' } }
       };
-      cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+      
+      // 设置不同列的对齐方式
+      if (j === 3 || j === 5) {
+        // 具体描述、解决方案：左对齐，顶部对齐
+        cell.alignment = { 
+          horizontal: 'left', 
+          vertical: 'top', 
+          wrapText: true,
+          indent: 1
+        };
+      } else if (j === 1 || j === 2 || j === 4 || j === 6) {
+        // 序号、问题分类、提出日期、解决日期：居中对齐
+        cell.alignment = { 
+          horizontal: 'center', 
+          vertical: 'middle', 
+          wrapText: true 
+        };
+      } else {
+        // 其他列：左对齐，顶部对齐
+        cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+      }
     }
+    
+    // 根据具体描述和解决方案的内容智能设置行高
+    const descHeight = calculateRowHeight(problem.具体描述, 55, 11);
+    const solutionHeight = calculateRowHeight(problem.解决方案, 55, 11);
+    row.height = Math.max(descHeight, solutionHeight);
     
     row.commit(); // 提交行修改
   });
