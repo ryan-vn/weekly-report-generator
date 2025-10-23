@@ -1,3 +1,6 @@
+// 加载环境变量配置（必须在最开头）
+require('dotenv').config();
+
 const ExcelJS = require('exceljs');
 const { execSync } = require('child_process');
 const { startOfWeek, endOfWeek, format } = require('date-fns');
@@ -170,9 +173,12 @@ const openai = new OpenAI({
 /**
  * 调用DeepSeek API解析提交信息
  * @param {string} commitMessage - Git提交信息
+ * @param {string} projectName - 项目名称
  * @returns {Object} 解析后的结构化数据
  */
-async function parseCommitWithDeepSeek(commitMessage) {
+async function parseCommitWithDeepSeek(commitMessage, projectName) {
+  console.log(`🤖 调用 DeepSeek AI 解析: [${projectName}] ${commitMessage.substring(0, 50)}...`);
+  
   const prompt = `请严格按照以下要求解析代码提交信息：
   1. 输出格式：必须是JSON字符串，无其他多余内容
   2. 字段说明：
@@ -185,6 +191,8 @@ async function parseCommitWithDeepSeek(commitMessage) {
   示例输出：{"类型": "任务", "分类": "开发新功能", "描述": "实现用户登录页验证码功能", "关联ID": "REQ-456"}`;
 
   try {
+    const startTime = Date.now();
+    
     const completion = await openai.chat.completions.create({
       model: config.deepseekModel,
       messages: [{ role: 'user', content: prompt }],
@@ -193,17 +201,24 @@ async function parseCommitWithDeepSeek(commitMessage) {
     });
 
     const result = completion.choices[0].message.content.trim();
-    return JSON.parse(result);
+    const parsed = JSON.parse(result);
+    
+    const duration = Date.now() - startTime;
+    console.log(`   ✅ AI 解析完成 (耗时: ${duration}ms) -> ${parsed.描述}`);
+    
+    return parsed;
   } catch (err) {
-    console.error(`❌ DeepSeek解析失败（消息：${commitMessage.substring(0, 20)}...）：`, 
-      err.message);
+    console.error(`   ❌ DeepSeek API 调用失败（${projectName}）：`, err.message);
     // 解析失败时降级处理
-    return {
+    const fallback = {
       类型: '任务',
       分类: '未分类',
       描述: commitMessage.substring(0, 50), // 截断过长描述
       关联ID: '无'
     };
+    
+    console.log(`   ⚠️  使用降级方案: ${fallback.描述}`);
+    return fallback;
   }
 }
 
@@ -217,9 +232,11 @@ async function processCommits(commits) {
   const tasks = []; // 重点任务跟进项
   const problems = []; // 日常工作遇到的问题（保持空白）
 
+  console.log(`\n📊 开始使用 DeepSeek AI 解析 ${commits.length} 条提交记录...\n`);
+
   for (const [index, commit] of commits.entries()) {
-    console.log(`🔍 解析第 ${index + 1}/${commits.length} 条提交... (${commit.project})`);
-    const parsed = await parseCommitWithDeepSeek(commit.message);
+    console.log(`\n[${index + 1}/${commits.length}] 处理提交: ${commit.hash} (${commit.date})`);
+    const parsed = await parseCommitWithDeepSeek(commit.message, commit.project);
 
     // 所有AI生成的内容都放到重点任务表格中
     tasks.push({
@@ -235,6 +252,8 @@ async function processCommits(commits) {
     });
   }
 
+  console.log(`\n✅ DeepSeek AI 解析完成！共处理 ${commits.length} 条提交，生成 ${tasks.length} 条任务\n`);
+  
   return { tasks, problems };
 }
 

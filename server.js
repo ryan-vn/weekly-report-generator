@@ -1,3 +1,6 @@
+// 加载环境变量配置（必须在最开头）
+require('dotenv').config();
+
 const express = require('express');
 const ExcelJS = require('exceljs');
 const { execSync } = require('child_process');
@@ -8,9 +11,6 @@ const path = require('path');
 
 const app = express();
 const PORT = 3000;
-
-// 简单的内存缓存
-const commitCache = new Map();
 
 // 中间件
 app.use(express.json());
@@ -190,13 +190,8 @@ function getGitCommits(projectPaths, startDate, endDate) {
  * 调用DeepSeek API解析提交信息
  */
 async function parseCommitWithDeepSeek(commitMessage, projectName) {
-  // 检查缓存
-  const cacheKey = `${projectName}:${commitMessage}`;
-  if (commitCache.has(cacheKey)) {
-    console.log(`📋 使用缓存解析结果: ${commitMessage.substring(0, 30)}...`);
-    return commitCache.get(cacheKey);
-  }
-
+  console.log(`🤖 调用 DeepSeek AI 解析: [${projectName}] ${commitMessage.substring(0, 50)}...`);
+  
   const prompt = `请严格按照以下要求解析代码提交信息：
   1. 输出格式：必须是JSON字符串，无其他多余内容
   2. 字段说明：
@@ -209,6 +204,8 @@ async function parseCommitWithDeepSeek(commitMessage, projectName) {
   示例输出：{"类型": "任务", "分类": "开发新功能", "描述": "实现用户登录页验证码功能", "关联ID": "REQ-456"}`;
 
   try {
+    const startTime = Date.now();
+    
     const completion = await openai.chat.completions.create({
       model: 'deepseek-chat',
       messages: [{ role: 'user', content: prompt }],
@@ -219,13 +216,12 @@ async function parseCommitWithDeepSeek(commitMessage, projectName) {
     const result = completion.choices[0].message.content.trim();
     const parsed = JSON.parse(result);
     
-    // 缓存结果
-    commitCache.set(cacheKey, parsed);
-    console.log(`💾 已缓存解析结果: ${commitMessage.substring(0, 30)}...`);
+    const duration = Date.now() - startTime;
+    console.log(`   ✅ AI 解析完成 (耗时: ${duration}ms) -> ${parsed.描述}`);
     
     return parsed;
   } catch (err) {
-    console.error(`❌ DeepSeek解析失败（${projectName}）:`, err.message);
+    console.error(`   ❌ DeepSeek API 调用失败（${projectName}）:`, err.message);
     const fallback = {
       类型: '任务',
       分类: '未分类',
@@ -233,8 +229,7 @@ async function parseCommitWithDeepSeek(commitMessage, projectName) {
       关联ID: '无'
     };
     
-    // 缓存失败结果
-    commitCache.set(cacheKey, fallback);
+    console.log(`   ⚠️  使用降级方案: ${fallback.描述}`);
     return fallback;
   }
 }
@@ -246,8 +241,10 @@ async function processCommits(commits, userName) {
   const tasks = [];
   const problems = []; // 保持空白，不填充任何内容
 
+  console.log(`\n📊 开始使用 DeepSeek AI 解析 ${commits.length} 条提交记录...\n`);
+  
   for (const [index, commit] of commits.entries()) {
-    console.log(`🔍 解析第 ${index + 1}/${commits.length} 条提交... (${commit.project})`);
+    console.log(`\n[${index + 1}/${commits.length}] 处理提交: ${commit.hash} (${commit.date})`);
     const parsed = await parseCommitWithDeepSeek(commit.message, commit.project);
 
     // 所有AI生成的内容都放到重点任务表格中
@@ -263,6 +260,8 @@ async function processCommits(commits, userName) {
       备注: '' // 备注栏为空
     });
   }
+
+  console.log(`\n✅ DeepSeek AI 解析完成！共处理 ${commits.length} 条提交，生成 ${tasks.length} 条任务\n`);
 
   return { tasks, problems };
 }

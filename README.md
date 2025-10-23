@@ -24,22 +24,27 @@
 npm install
 ```
 
-### 2. 设置环境变量（必须）
+### 2. 配置 DeepSeek API Key（必须）
 
-创建 `.env` 文件或设置环境变量：
+**推荐方式：使用 `.env` 文件**
+
+```bash
+# 复制模板文件
+cp .env.example .env
+
+# 编辑 .env 文件，将 sk-your-api-key-here 替换为你的真实 API Key
+# DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxx
+```
+
+**备选方式：设置环境变量**
 
 ```bash
 export DEEPSEEK_API_KEY="sk-your-api-key-here"
 ```
 
-或者复制 `.env.example` 为 `.env` 并填入你的 API Key：
-
-```bash
-cp .env.example .env
-# 编辑 .env 文件，填入你的 DeepSeek API Key
-```
-
 > 💡 获取 API Key：访问 https://platform.deepseek.com 注册并获取
+> 
+> ⚠️ **安全提示**：`.env` 文件已被 `.gitignore` 忽略，不会被提交到版本控制，请放心使用
 
 ### 3. 启动 Web 服务器
 
@@ -51,12 +56,13 @@ cp .env.example .env
 
 启动脚本会自动检查环境变量并启动服务器。
 
-**方式二：手动启动**
+**方式二：直接启动**
 
 ```bash
-export DEEPSEEK_API_KEY="sk-your-api-key-here"
 npm run server
 ```
+
+> 💡 程序会自动从 `.env` 文件加载配置
 
 ### 4. 打开浏览器
 
@@ -79,8 +85,9 @@ npm run server
 
 如果需要使用原始的命令行方式：
 
-1. 修改 `index.js` 中的配置项
-2. 运行：`npm start`
+1. 确保已配置 `.env` 文件（参考上面的配置步骤）
+2. 修改 `config.json` 配置文件（或让程序自动生成）
+3. 运行：`npm start`
 
 ## 📁 项目结构
 
@@ -89,13 +96,16 @@ weekly-report-generator/
 ├── index.js              # 原始命令行版本
 ├── server.js             # Web 服务器
 ├── start.sh              # 启动脚本
+├── config.json           # 用户配置（自动生成）
 ├── public/
 │   └── index.html        # 可视化界面
 ├── output/               # 生成的周报存放目录
 ├── 周报模版.xlsx         # Excel 模板
-├── .env.example          # 环境变量示例
-├── .env                  # 环境变量配置（需自行创建）
-└── package.json          # 项目配置
+├── .env.example          # 环境变量模板
+├── .env                  # 环境变量配置（需自行创建，不会被提交）
+├── .gitignore            # Git 忽略规则
+├── package.json          # 项目配置
+└── CHANGELOG.md          # 更新日志
 ```
 
 ## 🔧 配置说明
@@ -175,7 +185,11 @@ A: 访问 https://platform.deepseek.com 注册并获取 API Key
 
 ### Q: 忘记设置 API Key 会怎样？
 
-A: 命令行版本会立即退出并提示错误，Web 版本会在启动时显示警告，调用 API 时会报错
+A: 程序会在启动时显示警告，生成周报时会因无法调用 DeepSeek API 而失败。请确保配置了 `.env` 文件或设置了环境变量。
+
+### Q: .env 文件和环境变量哪个优先级更高？
+
+A: 如果同时存在，环境变量的优先级更高。但推荐使用 `.env` 文件方式，更安全和方便。
 
 ### Q: 可以不填日期吗？
 
