@@ -9,6 +9,9 @@ const path = require('path');
 const app = express();
 const PORT = 3000;
 
+// 简单的内存缓存
+const commitCache = new Map();
+
 // 中间件
 app.use(express.json());
 app.use(express.static('public'));
@@ -187,6 +190,13 @@ function getGitCommits(projectPaths, startDate, endDate) {
  * 调用DeepSeek API解析提交信息
  */
 async function parseCommitWithDeepSeek(commitMessage, projectName) {
+  // 检查缓存
+  const cacheKey = `${projectName}:${commitMessage}`;
+  if (commitCache.has(cacheKey)) {
+    console.log(`📋 使用缓存解析结果: ${commitMessage.substring(0, 30)}...`);
+    return commitCache.get(cacheKey);
+  }
+
   const prompt = `请严格按照以下要求解析代码提交信息：
   1. 输出格式：必须是JSON字符串，无其他多余内容
   2. 字段说明：
@@ -207,15 +217,25 @@ async function parseCommitWithDeepSeek(commitMessage, projectName) {
     });
 
     const result = completion.choices[0].message.content.trim();
-    return JSON.parse(result);
+    const parsed = JSON.parse(result);
+    
+    // 缓存结果
+    commitCache.set(cacheKey, parsed);
+    console.log(`💾 已缓存解析结果: ${commitMessage.substring(0, 30)}...`);
+    
+    return parsed;
   } catch (err) {
     console.error(`❌ DeepSeek解析失败（${projectName}）:`, err.message);
-    return {
+    const fallback = {
       类型: '任务',
       分类: '未分类',
       描述: commitMessage.substring(0, 50),
       关联ID: '无'
     };
+    
+    // 缓存失败结果
+    commitCache.set(cacheKey, fallback);
+    return fallback;
   }
 }
 
@@ -493,7 +513,7 @@ app.get('/api/browse-directory', async (req, res) => {
 /**
  * 生成周报API
  */
-app.post('/api/generate', async (req, res) => {
+app.post('/api/generate-report', async (req, res) => {
   try {
     const { userName, projectPaths, startDate, endDate } = req.body;
 
@@ -526,26 +546,23 @@ app.post('/api/generate', async (req, res) => {
     // 2. 解析并处理提交记录
     const { tasks, problems } = await processCommits(commits, userName);
 
-    // 3. 生成Excel周报
-    const { startStr, endStr } = getWeekRange(startDate, endDate);
-    const fileName = `${userName}_${startStr}-${endStr}_周报.xlsx`;
-    const outputPath = path.join(__dirname, 'output', fileName);
-    
-    // 确保输出目录存在
-    if (!fs.existsSync(path.join(__dirname, 'output'))) {
-      fs.mkdirSync(path.join(__dirname, 'output'));
-    }
-
-    await generateExcel(userName, tasks, problems, startDate, endDate, outputPath);
+    // 3. 返回周报数据供预览
+    const { startStr, endStr, year } = getWeekRange(startDate, endDate);
+    const title = `${userName} ${year}年${startStr}-${endStr}工作周报`;
 
     res.json({
       success: true,
-      message: '周报生成成功',
-      fileName,
-      tasks: tasks.length,
-      problems: problems.length,
+      message: '周报数据生成成功',
+      title,
+      tasks,
+      problems,
       projectCount: projectPaths.length,
-      downloadUrl: `/download/${fileName}`
+      dateRange: {
+        start: startDate,
+        end: endDate,
+        startStr,
+        endStr
+      }
     });
 
   } catch (err) {
@@ -594,6 +611,58 @@ app.get('/api/reports', (req, res) => {
     .sort((a, b) => b.createdAt - a.createdAt);
 
   res.json({ reports: files });
+});
+
+/**
+ * 生成Excel文件API
+ */
+app.post('/api/generate-excel', async (req, res) => {
+  try {
+    const { userName, title, tasks, problems, dateRange } = req.body;
+    
+    // 如果没有userName，从title中提取
+    let finalUserName = userName;
+    if (!finalUserName && title) {
+      // 从标题中提取用户名，例如："陈毅 2025年10月20日-10月24日工作周报" -> "陈毅"
+      const match = title.match(/^([^0-9\s]+)/);
+      if (match) {
+        finalUserName = match[1].trim();
+      }
+    }
+    
+    if (!finalUserName || !title || !tasks) {
+      return res.status(400).json({
+        success: false,
+        error: '缺少必要参数: userName, title, tasks'
+      });
+    }
+
+    // 生成Excel文件
+    const { startStr, endStr } = dateRange;
+    const fileName = `${finalUserName}_${startStr}-${endStr}_周报.xlsx`;
+    const outputPath = path.join(__dirname, 'output', fileName);
+    
+    // 确保输出目录存在
+    if (!fs.existsSync(path.join(__dirname, 'output'))) {
+      fs.mkdirSync(path.join(__dirname, 'output'));
+    }
+
+    await generateExcel(finalUserName, tasks, problems, dateRange.start, dateRange.end, outputPath);
+
+    res.json({
+      success: true,
+      message: 'Excel文件生成成功',
+      fileName,
+      downloadUrl: `/download/${fileName}`
+    });
+
+  } catch (err) {
+    console.error('❌ 生成Excel失败：', err.message);
+    res.status(500).json({ 
+      success: false, 
+      error: err.message 
+    });
+  }
 });
 
 // 启动服务器

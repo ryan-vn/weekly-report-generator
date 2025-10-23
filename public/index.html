@@ -78,6 +78,105 @@
             overflow-y: auto;
         }
 
+        /* 预览页面样式 */
+        .report-preview {
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .report-title {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .report-meta {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 8px;
+            flex-wrap: wrap;
+        }
+
+        .report-meta span {
+            font-size: 14px;
+            color: #1976d2;
+            font-weight: 500;
+        }
+
+        .report-section {
+            margin-bottom: 30px;
+        }
+
+        .report-section h3 {
+            color: #333;
+            border-bottom: 2px solid #1976d2;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tasks-table, .problems-table {
+            overflow-x: auto;
+        }
+
+        .tasks-table table, .problems-table table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .tasks-table th, .problems-table th {
+            background: #1976d2;
+            color: white;
+            padding: 12px 8px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .tasks-table td, .problems-table td {
+            padding: 8px;
+            border: 1px solid #e0e0e0;
+            vertical-align: top;
+        }
+
+        .tasks-table input, .tasks-table textarea {
+            width: 100%;
+            border: none;
+            background: transparent;
+            padding: 4px;
+            font-size: 12px;
+            resize: none;
+        }
+
+        .tasks-table textarea {
+            min-height: 60px;
+            line-height: 1.4;
+        }
+
+        .tasks-table input:focus, .tasks-table textarea:focus {
+            outline: 2px solid #1976d2;
+            background: #fff;
+        }
+
+        .preview-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
         .project-item {
             background: #f5f5f5;
             padding: 10px 15px;
@@ -377,6 +476,24 @@
             </div>
         </div>
 
+        <!-- 周报预览区域 -->
+        <div id="previewSection" class="card" style="display: none;">
+            <div class="preview-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0; color: #333;">📄 周报预览</h2>
+                <div class="preview-actions">
+                    <button id="editBtn" class="btn btn-secondary" style="margin-right: 10px;">✏️ 编辑</button>
+                    <button id="saveBtn" class="btn btn-primary" style="display: none; margin-right: 10px;">💾 保存</button>
+                    <button id="resetBtn" class="btn btn-secondary" style="display: none; margin-right: 10px;">🔄 重置</button>
+                    <button id="downloadBtn" class="btn btn-success" style="margin-right: 10px;">📥 下载Excel</button>
+                    <button id="backBtn" class="btn btn-outline">← 返回</button>
+                </div>
+            </div>
+            
+            <div id="previewContent" class="preview-content">
+                <!-- 预览内容将在这里动态生成 -->
+            </div>
+        </div>
+
         <!-- 历史周报列表 -->
         <div class="card reports-section">
             <h2 style="margin-bottom: 20px; color: #333;">📚 历史周报</h2>
@@ -583,7 +700,7 @@
             document.querySelector('.generate-btn').disabled = true;
 
             try {
-                const response = await fetch('/api/generate', {
+                const response = await fetch('/api/generate-report', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -597,21 +714,14 @@
                 });
 
                 const result = await response.json();
-
+                console.log('API响应结果:', result);
+                
                 if (result.success) {
-                    showAlert(
-                        `✅ ${result.message}！任务: ${result.tasks}条，问题: ${result.problems}条`, 
-                        'success'
-                    );
-                    
-                    if (result.downloadUrl) {
-                        setTimeout(() => {
-                            window.location.href = result.downloadUrl;
-                        }, 1000);
-                    }
-
-                    // 刷新历史记录
-                    loadReports();
+                    console.log('开始显示预览页面...');
+                    // 显示预览页面
+                    showPreview(result);
+                    showAlert('✅ 周报数据生成成功！', 'success');
+                    console.log('预览页面显示完成');
                 } else {
                     showAlert(`❌ ${result.error}`, 'error');
                 }
@@ -716,6 +826,223 @@
             console.log('项目计数元素:', document.getElementById('projectCount'));
             
             showAlert(`🔍 调试信息已输出到控制台\n当前项目数: ${projectPaths.length}`, 'info');
+        }
+
+        // 预览相关功能
+        let currentReportData = null;
+        let isEditMode = false;
+
+        // 显示预览页面
+        function showPreview(data) {
+            console.log('showPreview 被调用，数据:', data);
+            currentReportData = data;
+            isEditMode = false;
+            
+            // 隐藏表单，显示预览
+            const formSection = document.querySelector('.card');
+            const previewSection = document.getElementById('previewSection');
+            
+            console.log('表单区域:', formSection);
+            console.log('预览区域:', previewSection);
+            
+            if (formSection) {
+                formSection.style.display = 'none';
+                console.log('表单区域已隐藏');
+            }
+            if (previewSection) {
+                previewSection.style.display = 'block';
+                console.log('预览区域已显示');
+            } else {
+                console.error('预览区域元素未找到！');
+            }
+            
+            // 生成预览内容
+            generatePreviewContent(data);
+            
+            // 绑定预览按钮事件
+            bindPreviewEvents();
+            console.log('预览页面设置完成');
+        }
+
+        // 生成预览内容
+        function generatePreviewContent(data) {
+            console.log('generatePreviewContent 被调用，数据:', data);
+            const previewContent = document.getElementById('previewContent');
+            console.log('预览内容容器:', previewContent);
+            
+            let html = `
+                <div class="report-preview">
+                    <div class="report-title">${data.title}</div>
+                    <div class="report-meta">
+                        <span>📅 日期范围: ${data.dateRange.startStr} - ${data.dateRange.endStr}</span>
+                        <span>📦 项目数量: ${data.projectCount}</span>
+                        <span>📝 任务数量: ${data.tasks.length}</span>
+                    </div>
+                    
+                    <div class="report-section">
+                        <h3>一、重点任务跟进</h3>
+                        <div class="tasks-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>序号</th>
+                                        <th>重点需求或任务</th>
+                                        <th>事项说明</th>
+                                        <th>启动日期</th>
+                                        <th>预计完成日期</th>
+                                        <th>负责人</th>
+                                        <th>协同人或部门</th>
+                                        <th>完成进度</th>
+                                        <th>备注</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tasksTableBody">
+                                    ${data.tasks.map((task, index) => `
+                                        <tr>
+                                            <td>${task.序号}</td>
+                                            <td><input type="text" value="${task.重点需求或任务}" ${!isEditMode ? 'readonly' : ''}></td>
+                                            <td><textarea ${!isEditMode ? 'readonly' : ''}>${task.事项说明}</textarea></td>
+                                            <td><input type="text" value="${task.启动日期}" ${!isEditMode ? 'readonly' : ''}></td>
+                                            <td><input type="text" value="${task.预计完成日期}" ${!isEditMode ? 'readonly' : ''}></td>
+                                            <td><input type="text" value="${task.负责人}" ${!isEditMode ? 'readonly' : ''}></td>
+                                            <td><input type="text" value="${task.协同人或部门}" ${!isEditMode ? 'readonly' : ''}></td>
+                                            <td><input type="text" value="${task.完成进度}" ${!isEditMode ? 'readonly' : ''}></td>
+                                            <td><input type="text" value="${task.备注}" ${!isEditMode ? 'readonly' : ''}></td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="report-section">
+                        <h3>二、日常工作遇到的问题</h3>
+                        <div class="problems-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>序号</th>
+                                        <th>问题分类</th>
+                                        <th>具体描述</th>
+                                        <th>提出日期</th>
+                                        <th>解决方案</th>
+                                        <th>解决日期</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td colspan="6" style="text-align: center; color: #999;">暂无问题记录</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            previewContent.innerHTML = html;
+            console.log('预览内容HTML已生成并插入');
+        }
+
+        // 绑定预览页面事件
+        function bindPreviewEvents() {
+            // 编辑按钮
+            document.getElementById('editBtn').onclick = function() {
+                isEditMode = true;
+                this.style.display = 'none';
+                document.getElementById('saveBtn').style.display = 'inline-block';
+                document.getElementById('resetBtn').style.display = 'inline-block';
+                
+                // 启用所有输入框
+                const inputs = document.querySelectorAll('#previewContent input, #previewContent textarea');
+                inputs.forEach(input => {
+                    input.readOnly = false;
+                    input.style.backgroundColor = '#fff';
+                    input.style.border = '1px solid #ddd';
+                });
+            };
+
+            // 保存按钮
+            document.getElementById('saveBtn').onclick = function() {
+                savePreviewChanges();
+                isEditMode = false;
+                this.style.display = 'none';
+                document.getElementById('resetBtn').style.display = 'none';
+                document.getElementById('editBtn').style.display = 'inline-block';
+                
+                // 禁用所有输入框
+                const inputs = document.querySelectorAll('#previewContent input, #previewContent textarea');
+                inputs.forEach(input => {
+                    input.readOnly = true;
+                    input.style.backgroundColor = '#f5f5f5';
+                    input.style.border = '1px solid #e0e0e0';
+                });
+                
+                showAlert('✅ 修改已保存', 'success');
+            };
+
+            // 重置按钮
+            document.getElementById('resetBtn').onclick = function() {
+                if (confirm('确定要重置所有修改吗？')) {
+                    generatePreviewContent(currentReportData);
+                    bindPreviewEvents();
+                }
+            };
+
+            // 下载Excel按钮
+            document.getElementById('downloadBtn').onclick = function() {
+                downloadExcel();
+            };
+
+            // 返回按钮
+            document.getElementById('backBtn').onclick = function() {
+                document.querySelector('.card').style.display = 'block';
+                document.getElementById('previewSection').style.display = 'none';
+                currentReportData = null;
+            };
+        }
+
+        // 保存预览修改
+        function savePreviewChanges() {
+            const rows = document.querySelectorAll('#tasksTableBody tr');
+            rows.forEach((row, index) => {
+                const inputs = row.querySelectorAll('input, textarea');
+                if (currentReportData.tasks[index]) {
+                    currentReportData.tasks[index].重点需求或任务 = inputs[0].value;
+                    currentReportData.tasks[index].事项说明 = inputs[1].value;
+                    currentReportData.tasks[index].启动日期 = inputs[2].value;
+                    currentReportData.tasks[index].预计完成日期 = inputs[3].value;
+                    currentReportData.tasks[index].负责人 = inputs[4].value;
+                    currentReportData.tasks[index].协同人或部门 = inputs[5].value;
+                    currentReportData.tasks[index].完成进度 = inputs[6].value;
+                    currentReportData.tasks[index].备注 = inputs[7].value;
+                }
+            });
+        }
+
+        // 下载Excel
+        async function downloadExcel() {
+            try {
+                const response = await fetch('/api/generate-excel', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(currentReportData)
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('✅ Excel文件生成成功！', 'success');
+                    // 下载文件
+                    window.location.href = result.downloadUrl;
+                } else {
+                    showAlert('❌ 生成Excel失败: ' + result.error, 'error');
+                }
+            } catch (err) {
+                showAlert('❌ 下载失败: ' + err.message, 'error');
+            }
         }
     </script>
 </body>
